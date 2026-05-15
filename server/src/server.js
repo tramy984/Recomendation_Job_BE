@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const pool = require("./config/db");
 const authRoutes = require("./routes/auth.routes");
+const recruiterRoutes = require("./routes/recruiter.routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/recruiters", recruiterRoutes);
 
 app.get("/test-db", async (req, res) => {
   try {
