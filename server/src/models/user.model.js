@@ -15,6 +15,21 @@ const findUserByEmail = async (email) => {
   return result.rows[0];
 };
 
+const checkLogin = async (email) => {
+  if (!email) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `SELECT id, email, password, role, status, created_at
+     FROM users
+     WHERE email = $1`,
+    [email]
+  );
+
+  return result.rows[0] || null;
+};
+
 const createUser = async ({ fullName, email, passwordHash, role }) => {
   const client = await pool.connect();
 
@@ -61,5 +76,6 @@ const createUser = async ({ fullName, email, passwordHash, role }) => {
 
 module.exports = {
   findUserByEmail,
+  checkLogin,
   createUser,
 };

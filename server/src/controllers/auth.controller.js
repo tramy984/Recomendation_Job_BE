@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const {
   findUserByEmail,
+  checkLogin,
   createUser,
 } = require("../models/user.model");
 
@@ -96,6 +97,76 @@ const register = async (req, res) => {
   }
 };
 
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập email và mật khẩu.",
+      });
+    }
+
+    const user = await checkLogin(email);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Email hoặc mật khẩu không đúng.",
+      });
+    }
+
+    if (user.status === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản của bạn đã bị khóa.",
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Email hoặc mật khẩu không đúng.",
+      });
+    }
+
+    const { password: passwordHash, ...userWithoutPassword } = user;
+
+    const token = process.env.JWT_SECRET
+      ? jwt.sign(
+          {
+            id: userWithoutPassword.id,
+            email: userWithoutPassword.email,
+            role: userWithoutPassword.role,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "7d" }
+        )
+      : null;
+
+    return res.status(200).json({
+      success: true,
+      message: "Đăng nhập thành công",
+      data: {
+        user: userWithoutPassword,
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("lỗi đăng nhập:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
+  login,
 };
