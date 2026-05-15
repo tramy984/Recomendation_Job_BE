@@ -1,0 +1,101 @@
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const {
+  findUserByEmail,
+  createUser,
+} = require("../models/user.model");
+
+const ALLOWED_ROLES = ["candidate", "recruiter"];
+
+const register = async (req, res) => {
+  try {
+    const { fullName, email, password, role } = req.body;
+
+    const normalizedRole =
+      typeof role === "string"
+        ? role.trim().toLowerCase()
+        : role;
+
+    if (!fullName || !email || !password || !normalizedRole) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập đầy đủ thông tin.",
+      });
+    }
+
+    // FULL NAME
+    if (fullName.trim().length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Họ và tên phải có ít nhất 3 ký tự.",
+      });
+    }
+
+    // PASSWORD
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu phải có ít nhất 8 ký tự.",
+      });
+    }
+
+    // ROLE
+    if (!ALLOWED_ROLES.includes(normalizedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: "Role không hợp lệ.",
+      });
+    }
+
+    const existingUser = await findUserByEmail(email);
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Email của bạn đã được sử dụng.",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await createUser({
+      fullName,
+      email,
+      passwordHash,
+      role: normalizedRole,
+    });
+
+    const token = process.env.JWT_SECRET
+      ? jwt.sign(
+          {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "7d" }
+        )
+      : null;
+
+    return res.status(201).json({
+      success: true,
+      message: "Đăng ký tài khoản thành công",
+      data: {
+        user,
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi đăng ký:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = {
+  register,
+};

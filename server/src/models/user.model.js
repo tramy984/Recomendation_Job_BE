@@ -1,0 +1,65 @@
+const pool = require("../config/db");
+const {
+  createCandidateProfile,
+} = require("./candidate_profile.model");
+const {
+  createRecruiterProfile,
+} = require("./recruiter.model");
+
+const findUserByEmail = async (email) => {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE email = $1",
+    [email]
+  );
+
+  return result.rows[0];
+};
+
+const createUser = async ({ fullName, email, passwordHash, role }) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const userResult = await client.query(
+      `INSERT INTO users (email, password, role)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, role, status, created_at`,
+      [email, passwordHash, role]
+    );
+
+    const user = userResult.rows[0];
+    let profile = null;
+
+    if (role === "candidate") {
+      profile = await createCandidateProfile(client, {
+        userId: user.id,
+        fullName,
+      });
+    }
+
+    if (role === "recruiter") {
+      profile = await createRecruiterProfile(client, {
+        userId: user.id,
+        fullName,
+      });
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      ...user,
+      profile,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = {
+  findUserByEmail,
+  createUser,
+};

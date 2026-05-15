@@ -1,10 +1,12 @@
-const express = require("express");
-const cors = require("cors");
 require("dotenv").config();
 
+const express = require("express");
+const cors = require("cors");
 const pool = require("./config/db");
+const authRoutes = require("./routes/auth.routes");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -15,11 +17,11 @@ app.get("/", (req, res) => {
   });
 });
 
+app.use("/api/auth", authRoutes);
+
 app.get("/test-db", async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT NOW()"
-    );
+    const result = await pool.query("SELECT NOW()");
 
     res.json({
       success: true,
@@ -35,10 +37,6 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log(
-    `Server running on port ${PORT}`
-  );
+  console.log(`Server running on port ${PORT}`);
 });

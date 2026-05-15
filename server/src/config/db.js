@@ -13,12 +13,16 @@ const pool = new Pool({
   },
 });
 
-pool.connect((err) => {
+pool.connect((err, client, release) => {
   if (err) {
     console.log("Database connection error:");
     console.log(err.message);
   } else {
     console.log("Connect PostgreSQL success");
+  }
+
+  if (client) {
+    release();
   }
 });
 
