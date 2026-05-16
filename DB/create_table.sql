@@ -50,7 +50,7 @@ CREATE TABLE candidate_profile (
 CREATE TABLE recruiter (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT UNIQUE,
-    name VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
     phone VARCHAR(50),
     gender BOOLEAN,
     location VARCHAR(255),

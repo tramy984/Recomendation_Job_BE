@@ -7,7 +7,7 @@ const verifyToken = (req, res, next) => {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
-        message: "Chua dang nhap.",
+        message: "Chưa đăng nhập",
       });
     }
 
@@ -19,7 +19,7 @@ const verifyToken = (req, res, next) => {
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: "Token khong hop le hoac da het han.",
+      message: "Token đã hết hạn",
     });
   }
 };
