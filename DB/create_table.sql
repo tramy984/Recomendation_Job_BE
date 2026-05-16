@@ -2,7 +2,7 @@ CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('candidate', 'recruiter')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('candidate', 'recruiter','admin')),
     status BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -23,6 +23,7 @@ CREATE TABLE company (
     location VARCHAR(255),
     url_website VARCHAR(500),
     url_facebook VARCHAR(500),
+    certificate TEXT,
     logo TEXT
 );
 CREATE TABLE careers (
@@ -56,8 +57,6 @@ CREATE TABLE recruiter (
     location VARCHAR(255),
     date_of_birth DATE,
     avatar TEXT,
-    certificate TEXT,
-    status BOOLEAN DEFAULT TRUE,
     company_id BIGINT,
     is_verify_phone BOOLEAN DEFAULT FALSE,
     CONSTRAINT fk_recruiter_user
@@ -66,6 +65,51 @@ CREATE TABLE recruiter (
     CONSTRAINT fk_recruiter_company
         FOREIGN KEY (company_id)
         REFERENCES company(company_id)
+);
+CREATE TABLE pending_companies (
+    id BIGSERIAL PRIMARY KEY,
+    recruiter_id BIGINT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    tax_code VARCHAR(255),
+    description TEXT,
+    location VARCHAR(255),
+    reviewed_by BIGINT,
+    url_website VARCHAR(500),
+    url_facebook VARCHAR(500),
+
+    logo TEXT,
+
+    certificate TEXT,
+
+    status VARCHAR(50) DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected')),
+
+    reject_reason TEXT,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP,
+    CONSTRAINT fk_pending_company_recruiter
+        FOREIGN KEY (recruiter_id)
+        REFERENCES recruiter(id),
+    CONSTRAINT fk_pending_company_reviewed_by
+        FOREIGN KEY (reviewed_by)
+        REFERENCES users(id)
+);
+CREATE TABLE pending_company_industries (
+    id BIGSERIAL PRIMARY KEY,
+
+    pending_company_id BIGINT NOT NULL,
+    industry_id BIGINT NOT NULL,
+
+    CONSTRAINT fk_pending_company_industry_pending_company
+        FOREIGN KEY (pending_company_id)
+        REFERENCES pending_companies(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_pending_company_industry_industry
+        FOREIGN KEY (industry_id)
+        REFERENCES industry(id)
+        ON DELETE CASCADE
 );
 CREATE TABLE company_industry (
     id BIGSERIAL PRIMARY KEY,

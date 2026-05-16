@@ -54,6 +54,27 @@ const getAllCompanies = async () => {
   return result.rows;
 };
 
+const getCompaniesByName = async (name) => {
+  const keyword = typeof name === "string" ? name.trim() : "";
+
+  if (!keyword) return [];
+
+  const result = await pool.query(
+    `
+    ${COMPANY_FIELDS}
+    FROM company c
+    LEFT JOIN company_industry ci ON ci.id_company = c.company_id
+    LEFT JOIN industry i ON i.id = ci.id_industry
+    WHERE c.name ILIKE $1
+    GROUP BY c.company_id
+    ORDER BY c.company_id DESC
+    `,
+    [`%${keyword}%`]
+  );
+
+  return result.rows;
+};
+
 const getCompanyByRecruiterUserId = async (userId) => {
   if (!userId) return null;
 
@@ -76,5 +97,6 @@ const getCompanyByRecruiterUserId = async (userId) => {
 module.exports = {
   getAllCompanies,
   getCompanyById,
+  getCompaniesByName,
   getCompanyByRecruiterUserId,
 };
