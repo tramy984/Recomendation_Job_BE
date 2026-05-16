@@ -30,6 +30,37 @@ const checkLogin = async (email) => {
   return result.rows[0] || null;
 };
 
+const getUserByIdWithPassword = async (userId) => {
+  if (!userId) return null;
+
+  const result = await pool.query(
+    `
+    SELECT id, email, password, role, status, created_at
+    FROM users
+    WHERE id = $1
+    `,
+    [userId]
+  );
+
+  return result.rows[0] || null;
+};
+
+const updateUserPasswordById = async (userId, passwordHash) => {
+  if (!userId) return null;
+
+  const result = await pool.query(
+    `
+    UPDATE users
+    SET password = $1
+    WHERE id = $2
+    RETURNING id, email, role, status, created_at
+    `,
+    [passwordHash, userId]
+  );
+
+  return result.rows[0] || null;
+};
+
 const createUser = async ({ fullName, email, passwordHash, role }) => {
   const client = await pool.connect();
 
@@ -78,4 +109,6 @@ module.exports = {
   findUserByEmail,
   checkLogin,
   createUser,
+  getUserByIdWithPassword,
+  updateUserPasswordById,
 };

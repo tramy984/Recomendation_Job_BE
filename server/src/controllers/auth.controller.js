@@ -4,6 +4,8 @@ const {
   findUserByEmail,
   checkLogin,
   createUser,
+  getUserByIdWithPassword,
+  updateUserPasswordById,
 } = require("../models/user.model");
 
 const ALLOWED_ROLES = ["candidate", "recruiter"];
@@ -166,7 +168,90 @@ const login = async (req, res) => {
   }
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Chua dang nhap.",
+      });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập đầy đủ thông tin",
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu mới phải có ít nhất 8 ký tự.",
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu mới không được trùng với mật khẩu hiện tại.",
+      });
+    }
+
+    const user = await getUserByIdWithPassword(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy tài khoản.",
+      });
+    }
+
+    if (user.status === false) {
+      return res.status(403).json({
+        success: false,
+        message: "tài khoản của bạn đã bị khóa.",
+      });
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu hiện tại không đúng",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const updatedUser = await updateUserPasswordById(userId, passwordHash);
+
+    return res.status(200).json({
+      success: true,
+      message: "Đổi mật khẩu thành công",
+      data: {
+        user: updatedUser,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
+  changePassword,
   register,
   login,
 };
