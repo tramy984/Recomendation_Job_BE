@@ -6,6 +6,7 @@ const path = require("path");
 const pool = require("./config/db");
 const authRoutes = require("./routes/auth.routes");
 const recruiterRoutes = require("./routes/recruiter.routes");
+const companyRoutes = require("./routes/company.routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/recruiters", recruiterRoutes);
+app.use("/api/companies", companyRoutes);
 
 app.get("/test-db", async (req, res) => {
   try {
