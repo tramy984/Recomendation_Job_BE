@@ -1,14 +1,17 @@
 const {
   getAllCompanies,
   getCompanyById,
+  getCompaniesByExactName,
   getCompaniesByName,
   getCompanyByRecruiterUserId,
 } = require("../models/company.model");
 
 const {
+  approvePendingCompany,
   createPendingCompany,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
+  getPendingCompaniesByStatus,
   updatePendingCompany,
   updatePendingCompanyCertificateByRecruiterId,
 } = require("../models/pending_company.model");
@@ -95,6 +98,16 @@ const formatPendingCompaniesResponse = (req, pendingCompanies = []) => {
   );
 };
 
+const formatCompanyResponse = (req, company) => {
+  if (!company) return null;
+
+  return {
+    ...company,
+    logo: getPublicUrl(req, company.logo),
+    certificate: getPublicUrl(req, company.certificate),
+  };
+};
+
 const getCompanies = async (req, res) => {
   try {
     const companies = await getAllCompanies();
@@ -156,6 +169,47 @@ const searchCompaniesByName = async (req, res) => {
   }
 };
 
+const getCompaniesByNameFromCompanyTable = async (req, res) => {
+  try {
+    const { name } = req.query;
+    const keyword = typeof name === "string" ? name.trim() : "";
+
+    if (!keyword) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên công ty không được để trống.",
+      });
+    }
+
+    const companies = await getCompaniesByExactName(keyword);
+
+    if (companies.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin công ty.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Lấy thông tin công ty theo tên thành công.",
+      data: {
+        companies: companies.map((company) =>
+          formatCompanyResponse(req, company)
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi lấy thông tin công ty theo tên:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
 const getMyPendingCompanies = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -200,6 +254,119 @@ const getMyPendingCompanies = async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi lấy yêu cầu công ty theo nhà tuyển dụng:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
+const getPendingCompaniesWaitingConfirmation = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Không tìm thấy thông tin người dùng.",
+      });
+    }
+
+    if (role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản của bạn không có quyền truy cập thông tin này.",
+      });
+    }
+
+    const pendingCompanies = await getPendingCompaniesByStatus("pending");
+
+    return res.status(200).json({
+      success: true,
+      message: "Lấy danh sách công ty chờ xác nhận thành công.",
+      data: {
+        pendingCompanies: formatPendingCompaniesResponse(
+          req,
+          pendingCompanies
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi lấy danh sách công ty chờ xác nhận:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
+const approvePendingCompanyRequest = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { pendingCompanyId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Không tìm thấy thông tin người dùng.",
+      });
+    }
+
+    if (role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản của bạn không có quyền xác nhận công ty.",
+      });
+    }
+
+    if (!isValidId(pendingCompanyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "pendingCompanyId không hợp lệ.",
+      });
+    }
+
+    const result = await approvePendingCompany(pendingCompanyId, userId);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy yêu cầu công ty.",
+      });
+    }
+
+    if (result.alreadyReviewed) {
+      return res.status(400).json({
+        success: false,
+        message: "Yêu cầu công ty này đã được xử lý.",
+        data: {
+          pendingCompany: formatPendingCompanyResponse(
+            req,
+            result.pendingCompany
+          ),
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Xác nhận công ty thành công.",
+      data: {
+        company: formatCompanyResponse(req, result.company),
+        pendingCompany: formatPendingCompanyResponse(
+          req,
+          result.pendingCompany
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi xác nhận công ty chờ duyệt:", error);
 
     return res.status(500).json({
       success: false,
@@ -645,11 +812,14 @@ const getMyCompany = async (req, res) => {
 };
 
 module.exports = {
+  approvePendingCompanyRequest,
   createPendingCompanyRequest,
   getCompanies,
   getCompanyDetail,
+  getCompaniesByNameFromCompanyTable,
   getMyPendingCompanies,
   getMyCompany,
+  getPendingCompaniesWaitingConfirmation,
   searchCompaniesByName,
   updatePendingCompanyCertificate,
   updatePendingCompanyRequest,

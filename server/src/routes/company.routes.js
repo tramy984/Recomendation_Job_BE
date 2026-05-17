@@ -1,11 +1,14 @@
 const express = require("express");
 
 const {
+  approvePendingCompanyRequest,
   createPendingCompanyRequest,
+  getCompaniesByNameFromCompanyTable,
   getCompanies,
   getCompanyDetail,
   getMyPendingCompanies,
   getMyCompany,
+  getPendingCompaniesWaitingConfirmation,
   searchCompaniesByName,
   updatePendingCompanyCertificate,
   updatePendingCompanyRequest,
@@ -19,8 +22,15 @@ const router = express.Router();
 
 router.get("/", getCompanies);
 router.get("/searchByname", searchCompaniesByName);
+router.get("/by-name", getCompaniesByNameFromCompanyTable);
 router.post("/pending", verifyToken, createPendingCompanyRequest);
+router.get("/pending", verifyToken, getPendingCompaniesWaitingConfirmation);
 router.get("/pending/me", verifyToken, getMyPendingCompanies);
+router.patch(
+  "/pending/:pendingCompanyId/approve",
+  verifyToken,
+  approvePendingCompanyRequest
+);
 router.patch(
   "/pending/certificate",
   verifyToken,

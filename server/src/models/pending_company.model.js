@@ -69,6 +69,25 @@ const getPendingCompaniesByRecruiterId = async (recruiterId) => {
   return result.rows;
 };
 
+const getPendingCompaniesByStatus = async (status = "pending") => {
+  const result = await pool.query(
+    `
+    ${PENDING_COMPANY_FIELDS}
+    FROM pending_companies pc
+    LEFT JOIN pending_company_industries pci
+      ON pci.pending_company_id = pc.id
+    LEFT JOIN industry i
+      ON i.id = pci.industry_id
+    WHERE pc.status = $1
+    GROUP BY pc.id
+    ORDER BY pc.created_at DESC, pc.id DESC
+    `,
+    [status]
+  );
+
+  return result.rows;
+};
+
 const createPendingCompany = async ({
   recruiterId,
   name,
@@ -282,10 +301,160 @@ const updatePendingCompanyCertificateByRecruiterId = async (
   }
 };
 
+const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const pendingCompanyResult = await client.query(
+      `
+      SELECT *
+      FROM pending_companies
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [pendingCompanyId]
+    );
+
+    const pendingCompany = pendingCompanyResult.rows[0];
+
+    if (!pendingCompany) {
+      await client.query("COMMIT");
+      return null;
+    }
+
+    if (pendingCompany.status !== "pending") {
+      const reviewedPendingCompany = await getPendingCompanyById(
+        pendingCompanyId,
+        client
+      );
+
+      await client.query("COMMIT");
+      return {
+        pendingCompany: reviewedPendingCompany,
+        company: null,
+        alreadyReviewed: true,
+      };
+    }
+
+    const companyResult = await client.query(
+      `
+      INSERT INTO company (
+        name,
+        tax_code,
+        description,
+        location,
+        url_website,
+        url_facebook,
+        certificate,
+        logo
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *
+      `,
+      [
+        pendingCompany.name,
+        pendingCompany.tax_code,
+        pendingCompany.description,
+        pendingCompany.location,
+        pendingCompany.url_website,
+        pendingCompany.url_facebook,
+        pendingCompany.certificate,
+        pendingCompany.logo,
+      ]
+    );
+
+    const company = companyResult.rows[0];
+
+    await client.query(
+      `
+      INSERT INTO company_industry (id_company, id_industry)
+      SELECT $1, pci.industry_id
+      FROM pending_company_industries pci
+      WHERE pci.pending_company_id = $2
+      `,
+      [company.company_id, pendingCompanyId]
+    );
+
+    await client.query(
+      `
+      UPDATE recruiter
+      SET company_id = $1
+      WHERE id = $2
+      `,
+      [company.company_id, pendingCompany.recruiter_id]
+    );
+
+    await client.query(
+      `
+      UPDATE pending_companies
+      SET
+        status = 'approved',
+        reviewed_by = $1,
+        reviewed_at = CURRENT_TIMESTAMP,
+        reject_reason = NULL
+      WHERE id = $2
+      `,
+      [reviewedBy, pendingCompanyId]
+    );
+
+    const approvedPendingCompany = await getPendingCompanyById(
+      pendingCompanyId,
+      client
+    );
+
+    const approvedCompanyResult = await client.query(
+      `
+      SELECT
+        c.company_id,
+        c.name,
+        c.tax_code,
+        c.description,
+        c.location,
+        c.url_website,
+        c.url_facebook,
+        c.certificate,
+        c.logo,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', i.id,
+              'name', i.name
+            )
+          ) FILTER (WHERE i.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS industries
+      FROM company c
+      LEFT JOIN company_industry ci ON ci.id_company = c.company_id
+      LEFT JOIN industry i ON i.id = ci.id_industry
+      WHERE c.company_id = $1
+      GROUP BY c.company_id
+      `,
+      [company.company_id]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      pendingCompany: approvedPendingCompany,
+      company: approvedCompanyResult.rows[0],
+      alreadyReviewed: false,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
+  approvePendingCompany,
   createPendingCompany,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
+  getPendingCompaniesByStatus,
   updatePendingCompany,
   updatePendingCompanyCertificateByRecruiterId,
 };
