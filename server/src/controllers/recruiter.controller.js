@@ -3,6 +3,7 @@ const path = require("path");
 
 const {
   getRecruiterByUserId,
+  getRecruiterPostingChecklistByUserId,
   updateRecruiterById,
 } = require("../models/recruiter.model");
 
@@ -186,6 +187,56 @@ const getMyRecruiterProfile = async (req, res) => {
   }
 };
 
+const getMyRecruiterPostingChecklist = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Khong tim thay thong tin nguoi dung.",
+      });
+    }
+
+    if (role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message: "Tai khoan cua ban khong co quyen truy cap thong tin nay.",
+      });
+    }
+
+    const checklist = await getRecruiterPostingChecklistByUserId(userId);
+
+    if (!checklist) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Lay trang thai dang bai cua nha tuyen dung thanh cong.",
+      data: {
+        isVerifyPhone: Boolean(checklist.is_verify_phone),
+        hasCompanyInfo: Boolean(checklist.has_company_info),
+        isCertificateApproved: Boolean(
+          checklist.is_certificate_approved
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Loi lay trang thai dang bai cua recruiter:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
 const updateMyRecruiterProfile = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -309,5 +360,6 @@ const updateMyRecruiterProfile = async (req, res) => {
 
 module.exports = {
   getMyRecruiterProfile,
+  getMyRecruiterPostingChecklist,
   updateMyRecruiterProfile,
 };

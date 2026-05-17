@@ -28,6 +28,35 @@ const getRecruiterByUserId = async (userId) => {
   return result.rows[0] || null;
 };
 
+const getRecruiterPostingChecklistByUserId = async (userId) => {
+  if (!userId) return null;
+
+  const result = await pool.query(
+    `
+    SELECT
+      r.id AS recruiter_id,
+      COALESCE(r.is_verify_phone, FALSE) AS is_verify_phone,
+      (
+        c.company_id IS NOT NULL
+        OR EXISTS (
+          SELECT 1
+          FROM pending_companies pc
+          WHERE pc.recruiter_id = r.id
+            AND NULLIF(BTRIM(pc.certificate), '') IS NOT NULL
+        )
+      ) AS has_company_info,
+      COALESCE(NULLIF(BTRIM(c.certificate), '') IS NOT NULL, FALSE)
+        AS is_certificate_approved
+    FROM recruiter r
+    LEFT JOIN company c ON c.company_id = r.company_id
+    WHERE r.user_id = $1
+    `,
+    [userId]
+  );
+
+  return result.rows[0] || null;
+};
+
 const updateRecruiterById = async (id, updateData = {}) => {
   if (!id) return null;
 
@@ -89,5 +118,6 @@ const updateRecruiterById = async (id, updateData = {}) => {
 module.exports = {
   createRecruiterProfile,
   getRecruiterByUserId,
+  getRecruiterPostingChecklistByUserId,
   updateRecruiterById,
 };

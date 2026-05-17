@@ -2,6 +2,7 @@ const express = require("express");
 
 const {
   getMyRecruiterProfile,
+  getMyRecruiterPostingChecklist,
   updateMyRecruiterProfile,
 } = require("../controllers/recruiter.controller");
 
@@ -10,6 +11,7 @@ const { uploadRecruiterAvatar } = require("../middlewares/upload.middleware");
 
 const router = express.Router();
 
+router.get("/posting/check", verifyToken, getMyRecruiterPostingChecklist);
 router.get("/profile/me", verifyToken, getMyRecruiterProfile);
 
 router.patch(
