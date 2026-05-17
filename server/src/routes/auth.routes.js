@@ -3,6 +3,8 @@ const {
   changePassword,
   register,
   login,
+  requestPhoneOtp,
+  verifyPhoneOtp,
 } = require("../controllers/auth.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
 
@@ -10,6 +12,8 @@ const router = express.Router();
 
 router.post("/register", register);
 router.post("/login", login);
+router.post("/phone/request-otp", verifyToken, requestPhoneOtp);
+router.post("/phone/verify-otp", verifyToken, verifyPhoneOtp);
 router.patch("/change-password", verifyToken, changePassword);
 router.put("/change-password", verifyToken, changePassword);
 

@@ -106,13 +106,31 @@ const hasUpdatableRecruiterField = (updateData = {}) => {
     "status",
     "companyId",
     "company_id",
-    "isVerifyPhone",
-    "is_verify_phone",
   ];
 
   return updateFields.some((field) =>
     Object.prototype.hasOwnProperty.call(updateData, field)
   );
+};
+
+const normalizePhoneNumber = (phone) => {
+  if (typeof phone !== "string") return null;
+
+  const compactPhone = phone.replace(/[\s().-]/g, "");
+
+  if (/^0\d{9}$/.test(compactPhone)) {
+    return `+84${compactPhone.slice(1)}`;
+  }
+
+  if (/^84\d{9}$/.test(compactPhone)) {
+    return `+${compactPhone}`;
+  }
+
+  if (/^\+84\d{9}$/.test(compactPhone)) {
+    return compactPhone;
+  }
+
+  return null;
 };
 
 const normalizeOptionalFields = (updateData) => {
@@ -267,6 +285,9 @@ const updateMyRecruiterProfile = async (req, res) => {
     }
 
     const updateData = getUpdateData(req.body);
+    delete updateData.isVerifyPhone;
+    delete updateData.is_verify_phone;
+
     const oldAvatar = recruiter.avatar;
     const shouldDeleteOldAvatar =
       Boolean(req.file) ||
@@ -289,6 +310,32 @@ const updateMyRecruiterProfile = async (req, res) => {
     delete updateData.removeAvatar;
 
     normalizeOptionalFields(updateData);
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "phone")) {
+      if (updateData.phone === "" || updateData.phone === null) {
+        updateData.phone = null;
+        updateData.isVerifyPhone = false;
+      } else {
+        const normalizedPhone = normalizePhoneNumber(updateData.phone);
+
+        if (!normalizedPhone) {
+          if (req.file) {
+            await deleteRecruiterAvatarFile(getUploadedFileUrl(req, req.file));
+          }
+
+          return res.status(400).json({
+            success: false,
+            message: "Số điện thoại không hợp lệ",
+          });
+        }
+
+        updateData.phone = normalizedPhone;
+
+        if (normalizedPhone !== recruiter.phone) {
+          updateData.isVerifyPhone = false;
+        }
+      }
+    }
 
     if (!hasUpdatableRecruiterField(updateData)) {
       if (req.file) {

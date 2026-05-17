@@ -66,6 +66,22 @@ CREATE TABLE recruiter (
         FOREIGN KEY (company_id)
         REFERENCES company(company_id)
 );
+CREATE TABLE phone_verification_codes (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    phone VARCHAR(50) NOT NULL,
+    otp_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    consumed_at TIMESTAMP,
+    attempts INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_phone_verification_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+CREATE INDEX idx_phone_verification_active
+    ON phone_verification_codes(user_id, phone, consumed_at, created_at);
 CREATE TABLE pending_companies (
     id BIGSERIAL PRIMARY KEY,
     recruiter_id BIGINT NOT NULL,
