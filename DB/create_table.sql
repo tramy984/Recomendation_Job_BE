@@ -149,8 +149,8 @@ CREATE TABLE jobs (
     career_id BIGINT,
     company_id BIGINT,
     recruiter_id BIGINT,
-    salary_min BIGINT,
-    salary_max BIGINT,
+    salary_min NUMERIC,
+    salary_max NUMERIC,
     status BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expire TIMESTAMP,
@@ -158,8 +158,8 @@ CREATE TABLE jobs (
     id_level BIGINT,
     job_type_id BIGINT,
     candidate_number BIGINT,
-    exp_min BIGINT,
-    exp_max BIGINT,
+    exp_min NUMERIC,
+    exp_max NUMERIC,
     job_benefit TEXT,
     job_requirement TEXT,
     applied_number BIGINT DEFAULT 0,
@@ -178,6 +178,21 @@ CREATE TABLE jobs (
     CONSTRAINT fk_jobs_job_type
         FOREIGN KEY (job_type_id)
         REFERENCES job_type(id)
+);
+CREATE TABLE job_industry (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL,
+    industry_id BIGINT NOT NULL,
+    CONSTRAINT fk_job_industry_job
+        FOREIGN KEY (job_id)
+        REFERENCES jobs(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_job_industry_industry
+        FOREIGN KEY (industry_id)
+        REFERENCES industry(id)
+        ON DELETE CASCADE,
+    CONSTRAINT uq_job_industry
+        UNIQUE (job_id, industry_id)
 );
 CREATE TABLE cvs (
     id BIGSERIAL PRIMARY KEY,

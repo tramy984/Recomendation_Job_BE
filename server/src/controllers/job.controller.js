@@ -29,12 +29,37 @@ const hasOwn = (data, key) => {
   return Object.prototype.hasOwnProperty.call(data, key);
 };
 
+const hasAnyOwn = (data, keys) => {
+  return keys.some((key) => hasOwn(data, key));
+};
+
 const readAlias = (data, keys) => {
   const key = keys.find((fieldKey) =>
     hasOwn(data, fieldKey)
   );
 
   return key ? data[key] : undefined;
+};
+
+const isValidId = (value) => {
+  return /^\d+$/.test(String(value || ""));
+};
+
+const normalizeIndustryIds = (value) => {
+  const rawIds = Array.isArray(value) ? value : [value];
+
+  return [
+    ...new Set(
+      rawIds
+        .flatMap((item) => {
+          if (typeof item === "string") return item.split(",");
+          return [item];
+        })
+        .map((item) => String(item || "").trim())
+        .filter(isValidId)
+        .map(Number)
+    ),
+  ];
 };
 
 const normalizeText = (value) => {
@@ -69,6 +94,38 @@ const normalizeBigInt = (value) => {
     /^\d+$/.test(value.trim())
   ) {
     return Number(value.trim());
+  }
+
+  return undefined;
+};
+
+const normalizeDecimal = (value) => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim();
+
+    if (!normalizedValue) {
+      return null;
+    }
+
+    if (/^\d+(\.\d+)?$/.test(normalizedValue)) {
+      return Number(normalizedValue);
+    }
   }
 
   return undefined;
@@ -167,11 +224,11 @@ const createJobRequest = async (req, res) => {
       });
     }
 
-    const salaryMin = normalizeBigInt(
+    const salaryMin = normalizeDecimal(
       readAlias(payload, ["salaryMin", "salary_min"])
     );
 
-    const salaryMax = normalizeBigInt(
+    const salaryMax = normalizeDecimal(
       readAlias(payload, ["salaryMax", "salary_max"])
     );
 
@@ -206,15 +263,28 @@ const createJobRequest = async (req, res) => {
       ])
     );
 
-    const expMin = normalizeBigInt(
+    const expMin = normalizeDecimal(
       readAlias(payload, ["expMin", "exp_min"])
     );
 
-    const expMax = normalizeBigInt(
+    const expMax = normalizeDecimal(
       readAlias(payload, ["expMax", "exp_max"])
     );
 
     const expire = normalizeTimestamp(payload.expire);
+
+    const industryKeys = [
+      "industryIds",
+      "industry_ids",
+      "industryId",
+      "industry_id",
+    ];
+
+    const hasIndustryIds = hasAnyOwn(payload, industryKeys);
+
+    const industryIds = hasIndustryIds
+      ? normalizeIndustryIds(readAlias(payload, industryKeys))
+      : [];
 
     const invalidNumberFields = [
       ["Mức lương tối thiểu", salaryMin],
@@ -231,6 +301,13 @@ const createJobRequest = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `${invalidNumberFields[0][0]} không hợp lệ.`,
+      });
+    }
+
+    if (hasIndustryIds && industryIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Lĩnh vực công việc không hợp lệ.",
       });
     }
 
@@ -281,6 +358,7 @@ const createJobRequest = async (req, res) => {
       candidateNumber,
       expMin,
       expMax,
+      industryIds,
 
       jobBenefit: normalizeText(
         readAlias(payload, [
