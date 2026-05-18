@@ -1,8 +1,6 @@
 const express = require("express");
 
-const {
-  getIndustries,
-} = require("../controllers/industry.controller");
+const { getIndustries } = require("../controllers/industry.controller");
 
 const router = express.Router();
 

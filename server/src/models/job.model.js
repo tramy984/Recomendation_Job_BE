@@ -8,7 +8,7 @@ const getAllJobTypes = async () => {
       name
     FROM job_type
     ORDER BY id ASC
-    `
+    `,
   );
 
   return result.rows;
@@ -95,7 +95,7 @@ const getJobById = async (jobId, client = pool) => {
     LEFT JOIN recruiter r ON r.id = j.recruiter_id
     WHERE j.id = $1
     `,
-    [jobId]
+    [jobId],
   );
 
   return result.rows[0] || null;
@@ -127,7 +127,7 @@ const getJobsByCompanyId = async (companyId, filters = {}) => {
         WHERE filter_ji.job_id = j.id
           AND filter_ji.industry_id = ANY($${values.length}::bigint[])
       )
-      `
+      `,
     );
   }
 
@@ -143,7 +143,7 @@ const getJobsByCompanyId = async (companyId, filters = {}) => {
         WHERE filter_ji.job_id = j.id
           AND filter_i.name ILIKE $${values.length}
       )
-      `
+      `,
     );
   }
 
@@ -173,7 +173,7 @@ const getJobsByCompanyId = async (companyId, filters = {}) => {
     WHERE ${whereClauses.join(" AND ")}
     ORDER BY j.created_at DESC, j.id DESC
     `,
-    values
+    values,
   );
 
   return result.rows;
@@ -225,7 +225,7 @@ const getJobApplicationsByJobId = async (jobId) => {
     WHERE a.job_id = $1
     ORDER BY a.created_at DESC, a.id DESC
     `,
-    [jobId]
+    [jobId],
   );
 
   return result.rows;
@@ -287,7 +287,7 @@ const getApplicationById = async (applicationId) => {
     LEFT JOIN cvs cv ON cv.id = a.cv_id
     WHERE a.id = $1
     `,
-    [applicationId]
+    [applicationId],
   );
 
   return result.rows[0] || null;
@@ -312,7 +312,7 @@ const updateApplicationReviewById = async ({
     WHERE id = $1
     RETURNING id
     `,
-    [applicationId, status, reasonReject]
+    [applicationId, status, reasonReject],
   );
 
   if (!result.rows[0]) return null;
@@ -330,7 +330,7 @@ const updateJobStatusById = async (jobId, status, client = pool) => {
     WHERE id = $1
     RETURNING id
     `,
-    [jobId, status]
+    [jobId, status],
   );
 
   if (!result.rows[0]) return null;
@@ -338,12 +338,7 @@ const updateJobStatusById = async (jobId, status, client = pool) => {
   return getJobById(result.rows[0].id, client);
 };
 
-const updateJobExpireById = async (
-  jobId,
-  expire,
-  status,
-  client = pool
-) => {
+const updateJobExpireById = async (jobId, expire, status, client = pool) => {
   if (!jobId) return null;
 
   const result = await client.query(
@@ -355,7 +350,7 @@ const updateJobExpireById = async (
     WHERE id = $1
     RETURNING id
     `,
-    [jobId, expire, status]
+    [jobId, expire, status],
   );
 
   if (!result.rows[0]) return null;
@@ -372,7 +367,7 @@ const updateExpiredJobsStatus = async () => {
       AND expire <= CURRENT_TIMESTAMP
       AND COALESCE(status, -1) <> 2
     RETURNING id
-    `
+    `,
   );
 
   return result.rows;
@@ -445,7 +440,7 @@ const createJob = async ({
         expMax,
         jobBenefit,
         jobRequirement,
-      ]
+      ],
     );
 
     const job = result.rows[0];
@@ -459,7 +454,7 @@ const createJob = async ({
         )
         SELECT $1, unnest($2::bigint[])
         `,
-        [job.id, industryIds]
+        [job.id, industryIds],
       );
     }
 
@@ -537,7 +532,7 @@ const updateJobById = async ({
         expMax,
         jobBenefit,
         jobRequirement,
-      ]
+      ],
     );
 
     if (!result.rows[0]) {
@@ -550,7 +545,7 @@ const updateJobById = async ({
       DELETE FROM job_industry
       WHERE job_id = $1
       `,
-      [jobId]
+      [jobId],
     );
 
     if (Array.isArray(industryIds) && industryIds.length > 0) {
@@ -562,7 +557,7 @@ const updateJobById = async ({
         )
         SELECT $1, unnest($2::bigint[])
         `,
-        [jobId, industryIds]
+        [jobId, industryIds],
       );
     }
 
@@ -578,7 +573,54 @@ const updateJobById = async ({
     client.release();
   }
 };
+const getJobsWithPagination = async ({ limit, offset }) => {
+  const jobsQuery = `
+    SELECT
+      j.id,
+      j.name,
+      j.location,
+      j.salary_min,
+      j.salary_max,
+      j.expire,
 
+      jsonb_build_object(
+        'logo',
+        c.logo
+      ) AS company,
+
+      jsonb_build_object(
+        'name',
+        jt.name
+      ) AS job_type
+
+    FROM jobs j
+
+    LEFT JOIN company c
+      ON c.company_id = j.company_id
+
+    LEFT JOIN job_type jt
+      ON jt.id = j.job_type_id
+
+    ORDER BY j.created_at DESC
+
+    LIMIT $1 OFFSET $2
+  `;
+
+  const countQuery = `
+    SELECT COUNT(*)::int AS total
+    FROM jobs
+  `;
+
+  const [jobsResult, countResult] = await Promise.all([
+    pool.query(jobsQuery, [limit, offset]),
+    pool.query(countQuery),
+  ]);
+
+  return {
+    jobs: jobsResult.rows,
+    total: countResult.rows[0]?.total || 0,
+  };
+};
 module.exports = {
   createJob,
   getApplicationById,
@@ -590,5 +632,6 @@ module.exports = {
   updateJobExpireById,
   updateJobStatusById,
   getAllJobTypes,
-  updateJobById
+  updateJobById,
+  getJobsWithPagination,
 };
