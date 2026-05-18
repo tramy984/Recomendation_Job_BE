@@ -88,6 +88,23 @@ const getPendingCompaniesByStatus = async (status = "pending") => {
   return result.rows;
 };
 
+const getAllPendingCompanies = async () => {
+  const result = await pool.query(
+    `
+    ${PENDING_COMPANY_FIELDS}
+    FROM pending_companies pc
+    LEFT JOIN pending_company_industries pci
+      ON pci.pending_company_id = pc.id
+    LEFT JOIN industry i
+      ON i.id = pci.industry_id
+    GROUP BY pc.id
+    ORDER BY pc.created_at DESC, pc.id DESC
+    `
+  );
+
+  return result.rows;
+};
+
 const createPendingCompany = async ({
   recruiterId,
   name,
@@ -452,6 +469,7 @@ const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
 module.exports = {
   approvePendingCompany,
   createPendingCompany,
+  getAllPendingCompanies,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
   getPendingCompaniesByStatus,

@@ -9,9 +9,9 @@ const {
 const {
   approvePendingCompany,
   createPendingCompany,
+  getAllPendingCompanies,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
-  getPendingCompaniesByStatus,
   updatePendingCompany,
   updatePendingCompanyCertificateByRecruiterId,
 } = require("../models/pending_company.model");
@@ -282,11 +282,11 @@ const getPendingCompaniesWaitingConfirmation = async (req, res) => {
       });
     }
 
-    const pendingCompanies = await getPendingCompaniesByStatus("pending");
+    const pendingCompanies = await getAllPendingCompanies();
 
     return res.status(200).json({
       success: true,
-      message: "Lấy danh sách công ty chờ xác nhận thành công.",
+      message: "Lấy danh sách yêu cầu công ty thành công.",
       data: {
         pendingCompanies: formatPendingCompaniesResponse(
           req,

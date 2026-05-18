@@ -303,9 +303,9 @@ const updateApplicationReviewById = async ({
     `
     UPDATE applications
     SET
-      status = $2::text,
+      status = $2::varchar,
       approved_at = CASE
-        WHEN $2::text = 'approved' THEN CURRENT_TIMESTAMP
+        WHEN $2::varchar = 'approved' THEN CURRENT_TIMESTAMP
         ELSE NULL
       END,
       reason_reject = $3
