@@ -1,5 +1,38 @@
 const pool = require("../config/db");
 
+const RECRUITER_FIELDS = `
+  SELECT
+    r.*,
+    CASE
+      WHEN c.company_id IS NULL THEN NULL
+      ELSE jsonb_build_object(
+        'company_id', c.company_id,
+        'name', c.name,
+        'tax_code', c.tax_code,
+        'description', c.description,
+        'location', c.location,
+        'url_website', c.url_website,
+        'url_facebook', c.url_facebook,
+        'certificate', c.certificate,
+        'logo', c.logo,
+        'industries', COALESCE(
+          (
+            SELECT jsonb_agg(
+              DISTINCT jsonb_build_object(
+                'id', i.id,
+                'name', i.name
+              )
+            )
+            FROM company_industry ci
+            INNER JOIN industry i ON i.id = ci.id_industry
+            WHERE ci.id_company = c.company_id
+          ),
+          '[]'::jsonb
+        )
+      )
+    END AS company
+`;
+
 const createRecruiterProfile = async (client, { userId, fullName }) => {
   const result = await client.query(
     `
@@ -18,11 +51,28 @@ const getRecruiterByUserId = async (userId) => {
 
   const result = await pool.query(
     `
-    SELECT *
-    FROM recruiter
-    WHERE user_id = $1
+    ${RECRUITER_FIELDS}
+    FROM recruiter r
+    LEFT JOIN company c ON c.company_id = r.company_id
+    WHERE r.user_id = $1
     `,
     [userId]
+  );
+
+  return result.rows[0] || null;
+};
+
+const getRecruiterById = async (recruiterId) => {
+  if (!recruiterId) return null;
+
+  const result = await pool.query(
+    `
+    ${RECRUITER_FIELDS}
+    FROM recruiter r
+    LEFT JOIN company c ON c.company_id = r.company_id
+    WHERE r.id = $1
+    `,
+    [recruiterId]
   );
 
   return result.rows[0] || null;
@@ -117,6 +167,7 @@ const updateRecruiterById = async (id, updateData = {}) => {
 
 module.exports = {
   createRecruiterProfile,
+  getRecruiterById,
   getRecruiterByUserId,
   getRecruiterPostingChecklistByUserId,
   updateRecruiterById,

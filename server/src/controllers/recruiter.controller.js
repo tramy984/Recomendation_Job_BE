@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const {
+  getRecruiterById,
   getRecruiterByUserId,
   getRecruiterPostingChecklistByUserId,
   updateRecruiterById,
@@ -25,12 +26,37 @@ const getPublicAvatarUrl = (req, avatar) => {
   return avatar;
 };
 
+const getPublicFileUrl = (req, value) => {
+  if (!value || typeof value !== "string") return value || null;
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+
+  if (value.startsWith("/uploads/")) {
+    return `${req.protocol}://${req.get("host")}${value}`;
+  }
+
+  return value;
+};
+
+const formatCompanyResponse = (req, company) => {
+  if (!company) return null;
+
+  return {
+    ...company,
+    logo: getPublicFileUrl(req, company.logo),
+    certificate: getPublicFileUrl(req, company.certificate),
+  };
+};
+
 const formatRecruiterResponse = (req, recruiter) => {
   if (!recruiter) return null;
 
   return {
     ...recruiter,
     avatar: getPublicAvatarUrl(req, recruiter.avatar),
+    company: formatCompanyResponse(req, recruiter.company),
   };
 };
 
@@ -152,6 +178,82 @@ const normalizeOptionalFields = (updateData) => {
     updateData.avatar === null
   ) {
     updateData.avatar = null;
+  }
+};
+
+const isValidId = (value) => {
+  return /^\d+$/.test(String(value || ""));
+};
+
+const getRecruiterDetail = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { recruiterId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter" && role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Ban khong co quyen xem thong tin nha tuyen dung.",
+      });
+    }
+
+    if (!isValidId(recruiterId)) {
+      return res.status(400).json({
+        success: false,
+        message: "recruiterId khong hop le.",
+      });
+    }
+
+    if (role === "recruiter") {
+      const currentRecruiter = await getRecruiterByUserId(userId);
+
+      if (!currentRecruiter) {
+        return res.status(404).json({
+          success: false,
+          message: "Khong tim thay thong tin nha tuyen dung.",
+        });
+      }
+
+      if (Number(currentRecruiter.id) !== Number(recruiterId)) {
+        return res.status(403).json({
+          success: false,
+          message: "Ban khong co quyen xem thong tin nha tuyen dung nay.",
+        });
+      }
+    }
+
+    const recruiter = await getRecruiterById(recruiterId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Lay thong tin nha tuyen dung thanh cong.",
+      data: {
+        recruiter: formatRecruiterResponse(req, recruiter),
+      },
+    });
+  } catch (error) {
+    console.error("Loi lay thong tin nha tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server. Vui long thu lai sau.",
+      error: error.message,
+    });
   }
 };
 
@@ -406,6 +508,7 @@ const updateMyRecruiterProfile = async (req, res) => {
 };
 
 module.exports = {
+  getRecruiterDetail,
   getMyRecruiterProfile,
   getMyRecruiterPostingChecklist,
   updateMyRecruiterProfile,

@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const pool = require("./config/db");
+const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const recruiterRoutes = require("./routes/recruiter.routes");
 const companyRoutes = require("./routes/company.routes");
@@ -25,6 +26,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/recruiters", recruiterRoutes);
 app.use("/api/companies", companyRoutes);
 app.use("/api/industries", industryRoutes);

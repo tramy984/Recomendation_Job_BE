@@ -61,6 +61,31 @@ const updateUserPasswordById = async (userId, passwordHash) => {
   return result.rows[0] || null;
 };
 
+const getAllUsersWithFullName = async () => {
+  const result = await pool.query(
+    `
+    SELECT
+      u.id,
+      u.email,
+      u.role,
+      u.status,
+      u.created_at,
+      COALESCE(cp.full_name, r.full_name) AS full_name,
+      CASE
+        WHEN cp.id IS NOT NULL THEN cp.id
+        WHEN r.id IS NOT NULL THEN r.id
+        ELSE NULL
+      END AS profile_id
+    FROM users u
+    LEFT JOIN candidate_profile cp ON cp.user_id = u.id
+    LEFT JOIN recruiter r ON r.user_id = u.id
+    ORDER BY u.created_at DESC, u.id DESC
+    `
+  );
+
+  return result.rows;
+};
+
 const createUser = async ({ fullName, email, passwordHash, role }) => {
   const client = await pool.connect();
 
@@ -109,6 +134,7 @@ module.exports = {
   findUserByEmail,
   checkLogin,
   createUser,
+  getAllUsersWithFullName,
   getUserByIdWithPassword,
   updateUserPasswordById,
 };

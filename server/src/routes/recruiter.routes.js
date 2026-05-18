@@ -1,6 +1,7 @@
 const express = require("express");
 
 const {
+  getRecruiterDetail,
   getMyRecruiterProfile,
   getMyRecruiterPostingChecklist,
   updateMyRecruiterProfile,
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get("/posting/check", verifyToken, getMyRecruiterPostingChecklist);
 router.get("/profile/me", verifyToken, getMyRecruiterProfile);
+router.get("/:recruiterId", verifyToken, getRecruiterDetail);
 
 router.patch(
   "/profile/me",
