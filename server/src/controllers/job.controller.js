@@ -1,4 +1,12 @@
-const { createJob, getAllJobTypes } = require("../models/job.model");
+const {
+  createJob,
+  getAllJobTypes,
+  getJobById,
+  getJobsByCompanyId,
+  updateExpiredJobsStatus,
+  updateJobExpireById,
+  updateJobStatusById,
+} = require("../models/job.model");
 const { getRecruiterByUserId } = require("../models/recruiter.model");
 
 const getJobPayload = (body = {}) => {
@@ -149,6 +157,65 @@ const normalizeTimestamp = (value) => {
   return date;
 };
 
+const getCompanyJobFilters = (query = {}) => {
+  const name = normalizeText(
+    readAlias(query, ["name", "keyword", "q"])
+  );
+
+  const status = hasOwn(query, "status")
+    ? normalizeBigInt(query.status)
+    : undefined;
+
+  const industryKeys = [
+    "industryIds",
+    "industry_ids",
+    "industryId",
+    "industry_id",
+  ];
+
+  const industryValue = readAlias(query, ["industry"]);
+  const hasIndustryIds = hasAnyOwn(query, industryKeys);
+  const industryIds = hasIndustryIds || isValidId(industryValue)
+    ? normalizeIndustryIds(
+        hasIndustryIds
+          ? readAlias(query, industryKeys)
+          : industryValue
+      )
+    : [];
+  const industryName = hasIndustryIds || isValidId(industryValue)
+    ? normalizeText(
+        readAlias(query, ["industryName", "industry_name"])
+      )
+    : normalizeText(
+        readAlias(query, [
+          "industry",
+          "industryName",
+          "industry_name",
+        ])
+      );
+
+  if (status === null || status === undefined && hasOwn(query, "status")) {
+    return {
+      error: "Trang thai khong hop le.",
+    };
+  }
+
+  if (hasIndustryIds && industryIds.length === 0) {
+    return {
+      error: "Linh vuc cong viec khong hop le.",
+    };
+  }
+
+  return {
+    filters: {
+      name,
+      status,
+      industryIds,
+      industryName,
+    },
+  };
+};
+
 const getJobTypes = async (_req, res) => {
   try {
     const jobTypes = await getAllJobTypes();
@@ -169,6 +236,425 @@ const getJobTypes = async (_req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi máy chủ. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
+const closeMyCompanyJob = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { jobId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message: "Chi nha tuyen dung moi co quyen dong tin tuyen dung.",
+      });
+    }
+
+    if (!isValidId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId khong hop le.",
+      });
+    }
+
+    const recruiter = await getRecruiterByUserId(userId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    if (!recruiter.company_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Nha tuyen dung chua lien ket cong ty.",
+      });
+    }
+
+    const job = await getJobById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay tin tuyen dung.",
+      });
+    }
+
+    if (Number(job.company_id) !== Number(recruiter.company_id)) {
+      return res.status(403).json({
+        success: false,
+        message: "Ban khong co quyen dong tin tuyen dung nay.",
+      });
+    }
+
+    if (Number(job.status) === 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Tin tuyen dung da het han.",
+      });
+    }
+
+    if (job.expire && new Date(job.expire).getTime() <= Date.now()) {
+      const expiredJob = await updateJobStatusById(job.id, 2);
+
+      return res.status(400).json({
+        success: false,
+        message: "Tin tuyen dung da het han va duoc cap nhat status = 2.",
+        data: {
+          job: expiredJob,
+        },
+      });
+    }
+
+    const closedJob = await updateJobStatusById(job.id, 0);
+
+    return res.status(200).json({
+      success: true,
+      message: "Dong tin tuyen dung thanh cong.",
+      data: {
+        job: closedJob,
+      },
+    });
+  } catch (error) {
+    console.error("Loi dong tin tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const reopenMyCompanyJob = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { jobId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message: "Chi nha tuyen dung moi co quyen mo lai tin tuyen dung.",
+      });
+    }
+
+    if (!isValidId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId khong hop le.",
+      });
+    }
+
+    const recruiter = await getRecruiterByUserId(userId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    if (!recruiter.company_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Nha tuyen dung chua lien ket cong ty.",
+      });
+    }
+
+    const job = await getJobById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay tin tuyen dung.",
+      });
+    }
+
+    if (Number(job.company_id) !== Number(recruiter.company_id)) {
+      return res.status(403).json({
+        success: false,
+        message: "Ban khong co quyen mo lai tin tuyen dung nay.",
+      });
+    }
+
+    if (Number(job.status) === 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Tin tuyen dung da het han.",
+      });
+    }
+
+    if (job.expire && new Date(job.expire).getTime() <= Date.now()) {
+      const expiredJob = await updateJobStatusById(job.id, 2);
+
+      return res.status(400).json({
+        success: false,
+        message: "Tin tuyen dung da het han va duoc cap nhat status = 2.",
+        data: {
+          job: expiredJob,
+        },
+      });
+    }
+
+    if (Number(job.status) !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Chi co the mo lai tin tuyen dung dang dong.",
+      });
+    }
+
+    const reopenedJob = await updateJobStatusById(job.id, 1);
+
+    return res.status(200).json({
+      success: true,
+      message: "Mo lai tin tuyen dung thanh cong.",
+      data: {
+        job: reopenedJob,
+      },
+    });
+  } catch (error) {
+    console.error("Loi mo lai tin tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const extendMyCompanyJob = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { jobId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message: "Chi nha tuyen dung moi co quyen gia han tin tuyen dung.",
+      });
+    }
+
+    if (!isValidId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId khong hop le.",
+      });
+    }
+
+    const payload = getJobPayload(req.body);
+    const expire = normalizeTimestamp(
+      readAlias(payload, [
+        "expire",
+        "newExpire",
+        "new_expire",
+        "expireAt",
+        "expire_at",
+      ])
+    );
+
+    if (expire === null || expire === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Ngay het han moi khong hop le.",
+      });
+    }
+
+    if (expire.getTime() <= Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "Ngay het han moi phai lon hon thoi diem hien tai.",
+      });
+    }
+
+    const recruiter = await getRecruiterByUserId(userId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    if (!recruiter.company_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Nha tuyen dung chua lien ket cong ty.",
+      });
+    }
+
+    const job = await getJobById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay tin tuyen dung.",
+      });
+    }
+
+    if (Number(job.company_id) !== Number(recruiter.company_id)) {
+      return res.status(403).json({
+        success: false,
+        message: "Ban khong co quyen gia han tin tuyen dung nay.",
+      });
+    }
+
+    const currentStatus =
+      job.status === null || job.status === undefined
+        ? undefined
+        : Number(job.status);
+    const nextStatus = currentStatus === 0 ? 0 : 1;
+    const extendedJob = await updateJobExpireById(
+      job.id,
+      expire,
+      nextStatus
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Gia han tin tuyen dung thanh cong.",
+      data: {
+        job: extendedJob,
+      },
+    });
+  } catch (error) {
+    console.error("Loi gia han tin tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const updateExpiredJobsRequest = async (req, res) => {
+  try {
+    const role = req.user?.role;
+
+    if (role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Chi admin moi co quyen cap nhat tin tuyen dung het han.",
+      });
+    }
+
+    const expiredJobs = await updateExpiredJobsStatus();
+
+    return res.status(200).json({
+      success: true,
+      message: "Cap nhat tin tuyen dung het han thanh cong.",
+      data: {
+        updatedCount: expiredJobs.length,
+        jobIds: expiredJobs.map((job) => job.id),
+      },
+    });
+  } catch (error) {
+    console.error("Loi cap nhat tin tuyen dung het han:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const getMyCompanyJobs = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Chi nha tuyen dung moi co quyen xem tin tuyen dung cua cong ty.",
+      });
+    }
+
+    const recruiter = await getRecruiterByUserId(userId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    if (!recruiter.company_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Nha tuyen dung chua lien ket cong ty.",
+      });
+    }
+
+    const { filters, error } = getCompanyJobFilters(req.query);
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error,
+      });
+    }
+
+    const jobs = await getJobsByCompanyId(
+      recruiter.company_id,
+      filters
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Lay danh sach tin tuyen dung cua cong ty thanh cong.",
+      data: {
+        recruiterId: recruiter.id,
+        companyId: recruiter.company_id,
+        filters,
+        jobs,
+      },
+    });
+  } catch (error) {
+    console.error("Loi lay danh sach tin tuyen dung cua cong ty:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
       error: error.message,
     });
   }
@@ -408,6 +894,11 @@ const createJobRequest = async (req, res) => {
 };
 
 module.exports = {
+  closeMyCompanyJob,
   createJobRequest,
+  extendMyCompanyJob,
+  getMyCompanyJobs,
   getJobTypes,
+  reopenMyCompanyJob,
+  updateExpiredJobsRequest,
 };
