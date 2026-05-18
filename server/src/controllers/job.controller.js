@@ -1,11 +1,15 @@
 const {
   createJob,
+  getApplicationById,
   getAllJobTypes,
+  getJobApplicationsByJobId,
   getJobById,
   getJobsByCompanyId,
+  updateApplicationReviewById,
   updateExpiredJobsStatus,
   updateJobExpireById,
   updateJobStatusById,
+  updateJobById
 } = require("../models/job.model");
 const { getRecruiterByUserId } = require("../models/recruiter.model");
 
@@ -28,6 +32,30 @@ const getJobPayload = (body = {}) => {
 
   if (body.data.job) {
     return { ...body.data.job };
+  }
+
+  return { ...body.data };
+};
+
+const getApplicationPayload = (body = {}) => {
+  if (body.application) return { ...body.application };
+
+  if (!body.data) return { ...body };
+
+  if (typeof body.data === "string") {
+    try {
+      const parsedData = JSON.parse(body.data);
+
+      return parsedData.application
+        ? { ...parsedData.application }
+        : parsedData;
+    } catch (error) {
+      return {};
+    }
+  }
+
+  if (body.data.application) {
+    return { ...body.data.application };
   }
 
   return { ...body.data };
@@ -236,6 +264,304 @@ const getJobTypes = async (_req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi máy chủ. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
+const getJobDetailRequest = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    if (!isValidId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId khong hop le.",
+      });
+    }
+
+    const job = await getJobById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay tin tuyen dung.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Lay thong tin chi tiet tin tuyen dung thanh cong.",
+      data: {
+        job,
+      },
+    });
+  } catch (error) {
+    console.error("Loi lay thong tin chi tiet tin tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const getJobApplicationsRequest = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { jobId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter" && role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Ban khong co quyen xem danh sach ung vien cua tin nay.",
+      });
+    }
+
+    if (!isValidId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId khong hop le.",
+      });
+    }
+
+    const job = await getJobById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay tin tuyen dung.",
+      });
+    }
+
+    if (role === "recruiter") {
+      const recruiter = await getRecruiterByUserId(userId);
+
+      if (!recruiter) {
+        return res.status(404).json({
+          success: false,
+          message: "Khong tim thay thong tin nha tuyen dung.",
+        });
+      }
+
+      if (!recruiter.company_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Nha tuyen dung chua lien ket cong ty.",
+        });
+      }
+
+      if (Number(job.company_id) !== Number(recruiter.company_id)) {
+        return res.status(403).json({
+          success: false,
+          message: "Ban khong co quyen xem danh sach ung vien cua tin nay.",
+        });
+      }
+    }
+
+    const applications = await getJobApplicationsByJobId(job.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Lay danh sach ung vien cua tin tuyen dung thanh cong.",
+      data: {
+        jobId: job.id,
+        total: applications.length,
+        applications,
+      },
+    });
+  } catch (error) {
+    console.error("Loi lay danh sach ung vien cua tin tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const getReviewableApplication = async ({
+  applicationId,
+  userId,
+  role,
+  actionName,
+}) => {
+  if (!userId) {
+    return {
+      statusCode: 401,
+      response: {
+        success: false,
+        message: "Ban chua dang nhap.",
+      },
+    };
+  }
+
+  if (role !== "recruiter" && role !== "admin") {
+    return {
+      statusCode: 403,
+      response: {
+        success: false,
+        message: `Ban khong co quyen ${actionName} application nay.`,
+      },
+    };
+  }
+
+  if (!isValidId(applicationId)) {
+    return {
+      statusCode: 400,
+      response: {
+        success: false,
+        message: "applicationId khong hop le.",
+      },
+    };
+  }
+
+  const application = await getApplicationById(applicationId);
+
+  if (!application) {
+    return {
+      statusCode: 404,
+      response: {
+        success: false,
+        message: "Khong tim thay application.",
+      },
+    };
+  }
+
+  if (role === "admin") {
+    return { application };
+  }
+
+  const recruiter = await getRecruiterByUserId(userId);
+
+  if (!recruiter) {
+    return {
+      statusCode: 404,
+      response: {
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      },
+    };
+  }
+
+  if (!recruiter.company_id) {
+    return {
+      statusCode: 400,
+      response: {
+        success: false,
+        message: "Nha tuyen dung chua lien ket cong ty.",
+      },
+    };
+  }
+
+  if (
+    !application.job ||
+    Number(application.job.company_id) !== Number(recruiter.company_id)
+  ) {
+    return {
+      statusCode: 403,
+      response: {
+        success: false,
+        message: `Ban khong co quyen ${actionName} application nay.`,
+      },
+    };
+  }
+
+  return { application };
+};
+
+const approveApplicationRequest = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { application, statusCode, response } =
+      await getReviewableApplication({
+        applicationId,
+        userId: req.user?.id,
+        role: req.user?.role,
+        actionName: "duyet",
+      });
+
+    if (response) {
+      return res.status(statusCode).json(response);
+    }
+
+    const updatedApplication = await updateApplicationReviewById({
+      applicationId: application.id,
+      status: "approved",
+      reasonReject: null,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Duyet application thanh cong.",
+      data: {
+        application: updatedApplication,
+      },
+    });
+  } catch (error) {
+    console.error("Loi duyet application:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const rejectApplicationRequest = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { application, statusCode, response } =
+      await getReviewableApplication({
+        applicationId,
+        userId: req.user?.id,
+        role: req.user?.role,
+        actionName: "tu choi",
+      });
+
+    if (response) {
+      return res.status(statusCode).json(response);
+    }
+
+    const payload = getApplicationPayload(req.body);
+    const reasonReject = normalizeText(
+      readAlias(payload, [
+        "reasonReject",
+        "reason_reject",
+        "reason",
+      ])
+    );
+
+    const updatedApplication = await updateApplicationReviewById({
+      applicationId: application.id,
+      status: "rejected",
+      reasonReject,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Tu choi application thanh cong.",
+      data: {
+        application: updatedApplication,
+      },
+    });
+  } catch (error) {
+    console.error("Loi tu choi application:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi may chu. Vui long thu lai sau.",
       error: error.message,
     });
   }
@@ -893,12 +1219,85 @@ const createJobRequest = async (req, res) => {
   }
 };
 
+const updateJob = async (req, res) => {
+  try {
+    const jobId = req.params.id;
+
+    const {
+      name,
+      description,
+      salaryMin,
+      salaryMax,
+      status,
+      expire,
+      location,
+      levelId,
+      jobTypeId,
+      candidateNumber,
+      expMin,
+      expMax,
+      jobBenefit,
+      jobRequirement,
+      industryIds,
+    } = req.body;
+
+    const oldJob = await getJobById(jobId);
+
+    if (!oldJob) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy tin tuyển dụng.",
+      });
+    }
+
+    const updatedJob = await updateJobById({
+      jobId,
+      name,
+      description,
+      salaryMin,
+      salaryMax,
+      status,
+      expire,
+      location,
+      levelId,
+      jobTypeId,
+      candidateNumber,
+      expMin,
+      expMax,
+      jobBenefit,
+      jobRequirement,
+      industryIds,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật tin tuyển dụng thành công.",
+      data: {
+        job: updatedJob,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi cập nhật tin tuyển dụng:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
+  approveApplicationRequest,
   closeMyCompanyJob,
   createJobRequest,
   extendMyCompanyJob,
+  getJobApplicationsRequest,
+  getJobDetailRequest,
   getMyCompanyJobs,
   getJobTypes,
+  rejectApplicationRequest,
   reopenMyCompanyJob,
   updateExpiredJobsRequest,
+  updateJob,
 };
