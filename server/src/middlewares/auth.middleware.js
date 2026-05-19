@@ -7,7 +7,7 @@ const verifyToken = (req, res, next) => {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
-        message: "Chưa đăng nhập",
+        message: "Vui lòng đăng nhập",
       });
     }
 

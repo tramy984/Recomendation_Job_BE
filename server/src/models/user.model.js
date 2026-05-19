@@ -21,9 +21,26 @@ const checkLogin = async (email) => {
   }
 
   const result = await pool.query(
-    `SELECT id, email, password, role, status, created_at
-     FROM users
-     WHERE email = $1`,
+    `
+    SELECT
+      u.id,
+      u.email,
+      u.password,
+      u.role,
+      u.status,
+      u.created_at,
+      COALESCE(cp.full_name, r.full_name) AS full_name,
+      COALESCE(cp.avatar, r.avatar) AS avatar,
+      CASE
+        WHEN cp.id IS NOT NULL THEN cp.id
+        WHEN r.id IS NOT NULL THEN r.id
+        ELSE NULL
+      END AS profile_id
+    FROM users u
+    LEFT JOIN candidate_profile cp ON cp.user_id = u.id
+    LEFT JOIN recruiter r ON r.user_id = u.id
+    WHERE u.email = $1
+    `,
     [email]
   );
 

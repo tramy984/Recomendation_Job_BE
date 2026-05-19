@@ -4,6 +4,7 @@ const multer = require("multer");
 
 const recruiterUploadDir = path.join(__dirname, "../../uploads/recruiters");
 const candidateUploadDir = path.join(__dirname, "../../uploads/candidates");
+const cvUploadDir = path.join(__dirname, "../../uploads/cvs");
 const pendingCompanyCertificateUploadDir = path.join(
   __dirname,
   "../../uploads/pending-companies/certificates",
@@ -12,7 +13,7 @@ const pendingCompanyCertificateUploadDir = path.join(
 fs.mkdirSync(recruiterUploadDir, { recursive: true });
 fs.mkdirSync(pendingCompanyCertificateUploadDir, { recursive: true });
 fs.mkdirSync(candidateUploadDir, { recursive: true });
-
+fs.mkdirSync(cvUploadDir, { recursive: true });
 const recruiterAvatarStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, recruiterUploadDir);
@@ -43,6 +44,25 @@ const candidateAvatarStorage = multer.diskStorage({
         .basename(file.originalname, ext)
         .replace(/[^a-z0-9_-]/gi, "-")
         .slice(0, 40) || "avatar";
+
+    cb(
+      null,
+      `${Date.now()}-${Math.round(Math.random() * 1e9)}-${baseName}${ext}`,
+    );
+  },
+});
+const cvStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, cvUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    const baseName =
+      path
+        .basename(file.originalname, ext)
+        .replace(/[^a-z0-9_-]/gi, "-")
+        .slice(0, 60) || "cv";
 
     cb(
       null,
@@ -90,6 +110,22 @@ const uploadCandidateAvatarFile = multer({
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       return cb(new Error("File tải lên phải là hình ảnh."));
+    }
+
+    return cb(null, true);
+  },
+});
+const uploadCVFile = multer({
+  storage: cvStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (
+      file.mimetype !== "application/pdf" &&
+      path.extname(file.originalname).toLowerCase() !== ".pdf"
+    ) {
+      return cb(new Error("CV phải là file PDF."));
     }
 
     return cb(null, true);
@@ -156,6 +192,28 @@ const uploadCandidateAvatar = (req, res, next) => {
     });
   });
 };
+const uploadCV = (req, res, next) => {
+  uploadCVFile.single("cv")(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (
+      error instanceof multer.MulterError &&
+      error.code === "LIMIT_FILE_SIZE"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "CV không được vượt quá 5MB.",
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Tải CV thất bại.",
+    });
+  });
+};
 const uploadPendingCompanyCertificate = (req, res, next) => {
   uploadPendingCompanyCertificateFile.single("certificate")(
     req,
@@ -187,4 +245,5 @@ module.exports = {
   uploadPendingCompanyCertificate,
   uploadRecruiterAvatar,
   uploadCandidateAvatar,
+  uploadCV,
 };
