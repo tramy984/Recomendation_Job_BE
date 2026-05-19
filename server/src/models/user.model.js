@@ -86,6 +86,52 @@ const getAllUsersWithFullName = async () => {
   return result.rows;
 };
 
+const getUserByIdWithFullName = async (userId) => {
+  if (!userId) return null;
+
+  const result = await pool.query(
+    `
+    SELECT
+      u.id,
+      u.email,
+      u.role,
+      u.status,
+      u.created_at,
+      COALESCE(cp.full_name, r.full_name) AS full_name,
+      CASE
+        WHEN cp.id IS NOT NULL THEN cp.id
+        WHEN r.id IS NOT NULL THEN r.id
+        ELSE NULL
+      END AS profile_id
+    FROM users u
+    LEFT JOIN candidate_profile cp ON cp.user_id = u.id
+    LEFT JOIN recruiter r ON r.user_id = u.id
+    WHERE u.id = $1
+    `,
+    [userId]
+  );
+
+  return result.rows[0] || null;
+};
+
+const updateUserStatusById = async (userId, status) => {
+  if (!userId) return null;
+
+  const result = await pool.query(
+    `
+    UPDATE users
+    SET status = $2
+    WHERE id = $1
+    RETURNING id
+    `,
+    [userId, status]
+  );
+
+  if (!result.rows[0]) return null;
+
+  return getUserByIdWithFullName(result.rows[0].id);
+};
+
 const createUser = async ({ fullName, email, passwordHash, role }) => {
   const client = await pool.connect();
 
@@ -135,6 +181,8 @@ module.exports = {
   checkLogin,
   createUser,
   getAllUsersWithFullName,
+  getUserByIdWithFullName,
   getUserByIdWithPassword,
+  updateUserStatusById,
   updateUserPasswordById,
 };
