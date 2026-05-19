@@ -13,14 +13,12 @@ const {
   reopenMyCompanyJob,
   updateExpiredJobsRequest,
   updateJob,
+  getJobs,
 } = require("../controllers/job.controller");
-const {
-  getLevels,
-} = require("../controllers/level.controller");
+const { getLevels } = require("../controllers/level.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
-
 const router = express.Router();
-
+router.get("/", getJobs);
 router.get("/types", getJobTypes);
 router.get("/job-types", getJobTypes);
 router.get("/levels", getLevels);
@@ -29,22 +27,22 @@ router.get("/company/me", verifyToken, getMyCompanyJobs);
 router.patch(
   "/applications/:applicationId/approve",
   verifyToken,
-  approveApplicationRequest
+  approveApplicationRequest,
 );
 router.post(
   "/applications/:applicationId/approve",
   verifyToken,
-  approveApplicationRequest
+  approveApplicationRequest,
 );
 router.patch(
   "/applications/:applicationId/reject",
   verifyToken,
-  rejectApplicationRequest
+  rejectApplicationRequest,
 );
 router.post(
   "/applications/:applicationId/reject",
   verifyToken,
-  rejectApplicationRequest
+  rejectApplicationRequest,
 );
 router.get("/:jobId/applications", verifyToken, getJobApplicationsRequest);
 router.get("/:jobId", getJobDetailRequest);

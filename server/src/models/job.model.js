@@ -573,7 +573,96 @@ const updateJobById = async ({
     client.release();
   }
 };
-const getJobsWithPagination = async ({ limit, offset }) => {
+const getJobsWithPagination = async ({
+  limit,
+  offset,
+  name,
+  industryId,
+  status,
+  jobTypeId,
+  levelId,
+  salaryMin,
+  salaryMax,
+  expMin,
+  expMax,
+}) => {
+  const values = [];
+  const where = [];
+
+  if (name) {
+    values.push(`%${name}%`);
+    where.push(`
+      (
+        j.name ILIKE $${values.length}
+        OR j.location ILIKE $${values.length}
+        OR c.name ILIKE $${values.length}
+      )
+    `);
+  }
+
+  if (industryId) {
+    values.push(industryId);
+    where.push(`
+      EXISTS (
+        SELECT 1
+        FROM job_industry ji
+        WHERE ji.job_id = j.id
+          AND ji.industry_id = $${values.length}
+      )
+    `);
+  }
+
+  if (status !== undefined && status !== "") {
+    values.push(status);
+    where.push(`j.status = $${values.length}`);
+  }
+
+  if (jobTypeId) {
+    values.push(jobTypeId);
+    where.push(`j.job_type_id = $${values.length}`);
+  }
+
+  if (levelId) {
+    values.push(levelId);
+    where.push(`j.id_level = $${values.length}`);
+  }
+
+  if (salaryMin) {
+    values.push(salaryMin);
+    where.push(`j.salary_max >= $${values.length}`);
+  }
+
+  if (salaryMax) {
+    values.push(salaryMax);
+    where.push(`j.salary_min <= $${values.length}`);
+  }
+
+  if (expMin) {
+    values.push(expMin);
+    where.push(`j.exp_max >= $${values.length}`);
+  }
+
+  if (expMax) {
+    values.push(expMax);
+    where.push(`j.exp_min <= $${values.length}`);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
+  const filterValues = [...values];
+
+  values.push(limit);
+  const limitIndex = values.length;
+
+  values.push(offset);
+  const offsetIndex = values.length;
+
+  const baseFrom = `
+    FROM jobs j
+    LEFT JOIN company c ON c.company_id = j.company_id
+    LEFT JOIN job_type jt ON jt.id = j.job_type_id
+  `;
+
   const jobsQuery = `
     SELECT
       j.id,
@@ -584,36 +673,30 @@ const getJobsWithPagination = async ({ limit, offset }) => {
       j.expire,
 
       jsonb_build_object(
-        'logo',
-        c.logo
+        'logo', c.logo
       ) AS company,
 
       jsonb_build_object(
-        'name',
-        jt.name
+        'name', jt.name
       ) AS job_type
 
-    FROM jobs j
+    ${baseFrom}
 
-    LEFT JOIN company c
-      ON c.company_id = j.company_id
+    ${whereSql}
 
-    LEFT JOIN job_type jt
-      ON jt.id = j.job_type_id
-
-    ORDER BY j.created_at DESC
-
-    LIMIT $1 OFFSET $2
+    ORDER BY j.created_at DESC, j.id DESC
+    LIMIT $${limitIndex} OFFSET $${offsetIndex}
   `;
 
   const countQuery = `
     SELECT COUNT(*)::int AS total
-    FROM jobs
+    ${baseFrom}
+    ${whereSql}
   `;
 
   const [jobsResult, countResult] = await Promise.all([
-    pool.query(jobsQuery, [limit, offset]),
-    pool.query(countQuery),
+    pool.query(jobsQuery, values),
+    pool.query(countQuery, filterValues),
   ]);
 
   return {

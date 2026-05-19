@@ -9,7 +9,7 @@ const {
   updateExpiredJobsStatus,
   updateJobExpireById,
   updateJobStatusById,
-  updateJobById
+  updateJobById,
 } = require("../models/job.model");
 const { getRecruiterByUserId } = require("../models/recruiter.model");
 
@@ -22,9 +22,7 @@ const getJobPayload = (body = {}) => {
     try {
       const parsedData = JSON.parse(body.data);
 
-      return parsedData.job
-        ? { ...parsedData.job }
-        : parsedData;
+      return parsedData.job ? { ...parsedData.job } : parsedData;
     } catch (error) {
       return {};
     }
@@ -70,9 +68,7 @@ const hasAnyOwn = (data, keys) => {
 };
 
 const readAlias = (data, keys) => {
-  const key = keys.find((fieldKey) =>
-    hasOwn(data, fieldKey)
-  );
+  const key = keys.find((fieldKey) => hasOwn(data, fieldKey));
 
   return key ? data[key] : undefined;
 };
@@ -93,7 +89,7 @@ const normalizeIndustryIds = (value) => {
         })
         .map((item) => String(item || "").trim())
         .filter(isValidId)
-        .map(Number)
+        .map(Number),
     ),
   ];
 };
@@ -109,26 +105,15 @@ const normalizeText = (value) => {
 };
 
 const normalizeBigInt = (value) => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
-  if (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= 0
-  ) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
     return value;
   }
 
-  if (
-    typeof value === "string" &&
-    /^\d+$/.test(value.trim())
-  ) {
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
     return Number(value.trim());
   }
 
@@ -136,19 +121,11 @@ const normalizeBigInt = (value) => {
 };
 
 const normalizeDecimal = (value) => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    value >= 0
-  ) {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     return value;
   }
 
@@ -168,11 +145,7 @@ const normalizeDecimal = (value) => {
 };
 
 const normalizeTimestamp = (value) => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
@@ -186,9 +159,7 @@ const normalizeTimestamp = (value) => {
 };
 
 const getCompanyJobFilters = (query = {}) => {
-  const name = normalizeText(
-    readAlias(query, ["name", "keyword", "q"])
-  );
+  const name = normalizeText(readAlias(query, ["name", "keyword", "q"]));
 
   const status = hasOwn(query, "status")
     ? normalizeBigInt(query.status)
@@ -203,26 +174,20 @@ const getCompanyJobFilters = (query = {}) => {
 
   const industryValue = readAlias(query, ["industry"]);
   const hasIndustryIds = hasAnyOwn(query, industryKeys);
-  const industryIds = hasIndustryIds || isValidId(industryValue)
-    ? normalizeIndustryIds(
-        hasIndustryIds
-          ? readAlias(query, industryKeys)
-          : industryValue
-      )
-    : [];
-  const industryName = hasIndustryIds || isValidId(industryValue)
-    ? normalizeText(
-        readAlias(query, ["industryName", "industry_name"])
-      )
-    : normalizeText(
-        readAlias(query, [
-          "industry",
-          "industryName",
-          "industry_name",
-        ])
-      );
+  const industryIds =
+    hasIndustryIds || isValidId(industryValue)
+      ? normalizeIndustryIds(
+          hasIndustryIds ? readAlias(query, industryKeys) : industryValue,
+        )
+      : [];
+  const industryName =
+    hasIndustryIds || isValidId(industryValue)
+      ? normalizeText(readAlias(query, ["industryName", "industry_name"]))
+      : normalizeText(
+          readAlias(query, ["industry", "industryName", "industry_name"]),
+        );
 
-  if (status === null || status === undefined && hasOwn(query, "status")) {
+  if (status === null || (status === undefined && hasOwn(query, "status"))) {
     return {
       error: "Trang thai khong hop le.",
     };
@@ -256,10 +221,7 @@ const getJobTypes = async (_req, res) => {
       },
     });
   } catch (error) {
-    console.error(
-      "Lỗi lấy danh sách hình thức làm việc:",
-      error
-    );
+    console.error("Lỗi lấy danh sách hình thức làm việc:", error);
 
     return res.status(500).json({
       success: false,
@@ -536,11 +498,7 @@ const rejectApplicationRequest = async (req, res) => {
 
     const payload = getApplicationPayload(req.body);
     const reasonReject = normalizeText(
-      readAlias(payload, [
-        "reasonReject",
-        "reason_reject",
-        "reason",
-      ])
+      readAlias(payload, ["reasonReject", "reason_reject", "reason"]),
     );
 
     const updatedApplication = await updateApplicationReviewById({
@@ -805,7 +763,7 @@ const extendMyCompanyJob = async (req, res) => {
         "new_expire",
         "expireAt",
         "expire_at",
-      ])
+      ]),
     );
 
     if (expire === null || expire === undefined) {
@@ -859,11 +817,7 @@ const extendMyCompanyJob = async (req, res) => {
         ? undefined
         : Number(job.status);
     const nextStatus = currentStatus === 0 ? 0 : 1;
-    const extendedJob = await updateJobExpireById(
-      job.id,
-      expire,
-      nextStatus
-    );
+    const extendedJob = await updateJobExpireById(job.id, expire, nextStatus);
 
     return res.status(200).json({
       success: true,
@@ -960,10 +914,7 @@ const getMyCompanyJobs = async (req, res) => {
       });
     }
 
-    const jobs = await getJobsByCompanyId(
-      recruiter.company_id,
-      filters
-    );
+    const jobs = await getJobsByCompanyId(recruiter.company_id, filters);
 
     return res.status(200).json({
       success: true,
@@ -1001,8 +952,7 @@ const createJobRequest = async (req, res) => {
     if (role !== "recruiter") {
       return res.status(403).json({
         success: false,
-        message:
-          "Chỉ nhà tuyển dụng mới có quyền tạo tin tuyển dụng.",
+        message: "Chỉ nhà tuyển dụng mới có quyền tạo tin tuyển dụng.",
       });
     }
 
@@ -1011,16 +961,14 @@ const createJobRequest = async (req, res) => {
     if (!recruiter) {
       return res.status(404).json({
         success: false,
-        message:
-          "Không tìm thấy thông tin nhà tuyển dụng.",
+        message: "Không tìm thấy thông tin nhà tuyển dụng.",
       });
     }
 
     if (!recruiter.company_id) {
       return res.status(400).json({
         success: false,
-        message:
-          "Nhà tuyển dụng chưa liên kết công ty.",
+        message: "Nhà tuyển dụng chưa liên kết công ty.",
       });
     }
 
@@ -1031,57 +979,37 @@ const createJobRequest = async (req, res) => {
     if (!name) {
       return res.status(400).json({
         success: false,
-        message:
-          "Tên tin tuyển dụng không được để trống.",
+        message: "Tên tin tuyển dụng không được để trống.",
       });
     }
 
     const salaryMin = normalizeDecimal(
-      readAlias(payload, ["salaryMin", "salary_min"])
+      readAlias(payload, ["salaryMin", "salary_min"]),
     );
 
     const salaryMax = normalizeDecimal(
-      readAlias(payload, ["salaryMax", "salary_max"])
+      readAlias(payload, ["salaryMax", "salary_max"]),
     );
 
-    const normalizedStatus = normalizeBigInt(
-      payload.status
-    );
+    const normalizedStatus = normalizeBigInt(payload.status);
 
-    const status =
-      normalizedStatus === null
-        ? 1
-        : normalizedStatus;
+    const status = normalizedStatus === null ? 1 : normalizedStatus;
 
     const levelId = normalizeBigInt(
-      readAlias(payload, [
-        "levelId",
-        "idLevel",
-        "id_level",
-      ])
+      readAlias(payload, ["levelId", "idLevel", "id_level"]),
     );
 
     const jobTypeId = normalizeBigInt(
-      readAlias(payload, [
-        "jobTypeId",
-        "job_type_id",
-      ])
+      readAlias(payload, ["jobTypeId", "job_type_id"]),
     );
 
     const candidateNumber = normalizeBigInt(
-      readAlias(payload, [
-        "candidateNumber",
-        "candidate_number",
-      ])
+      readAlias(payload, ["candidateNumber", "candidate_number"]),
     );
 
-    const expMin = normalizeDecimal(
-      readAlias(payload, ["expMin", "exp_min"])
-    );
+    const expMin = normalizeDecimal(readAlias(payload, ["expMin", "exp_min"]));
 
-    const expMax = normalizeDecimal(
-      readAlias(payload, ["expMax", "exp_max"])
-    );
+    const expMax = normalizeDecimal(readAlias(payload, ["expMax", "exp_max"]));
 
     const expire = normalizeTimestamp(payload.expire);
 
@@ -1126,8 +1054,7 @@ const createJobRequest = async (req, res) => {
     if (expire === undefined) {
       return res.status(400).json({
         success: false,
-        message:
-          "Ngày hết hạn tuyển dụng không hợp lệ.",
+        message: "Ngày hết hạn tuyển dụng không hợp lệ.",
       });
     }
 
@@ -1138,20 +1065,14 @@ const createJobRequest = async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Mức lương tối thiểu không được lớn hơn mức lương tối đa.",
+        message: "Mức lương tối thiểu không được lớn hơn mức lương tối đa.",
       });
     }
 
-    if (
-      expMin !== null &&
-      expMax !== null &&
-      Number(expMin) > Number(expMax)
-    ) {
+    if (expMin !== null && expMax !== null && Number(expMin) > Number(expMax)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Kinh nghiệm tối thiểu không được lớn hơn kinh nghiệm tối đa.",
+        message: "Kinh nghiệm tối thiểu không được lớn hơn kinh nghiệm tối đa.",
       });
     }
 
@@ -1173,47 +1094,35 @@ const createJobRequest = async (req, res) => {
       industryIds,
 
       jobBenefit: normalizeText(
-        readAlias(payload, [
-          "jobBenefit",
-          "job_benefit",
-        ])
+        readAlias(payload, ["jobBenefit", "job_benefit"]),
       ),
 
       jobRequirement: normalizeText(
-        readAlias(payload, [
-          "jobRequirement",
-          "job_requirement",
-        ])
+        readAlias(payload, ["jobRequirement", "job_requirement"]),
       ),
     });
 
     return res.status(201).json({
       success: true,
-      message:
-        "Tạo tin tuyển dụng thành công.",
+      message: "Tạo tin tuyển dụng thành công.",
       data: {
         job,
       },
     });
   } catch (error) {
-    console.error(
-      "Lỗi tạo tin tuyển dụng:",
-      error
-    );
+    console.error("Lỗi tạo tin tuyển dụng:", error);
 
     if (error.code === "23503") {
       return res.status(400).json({
         success: false,
-        message:
-          "Dữ liệu liên kết không hợp lệ.",
+        message: "Dữ liệu liên kết không hợp lệ.",
         error: error.detail || error.message,
       });
     }
 
     return res.status(500).json({
       success: false,
-      message:
-        "Lỗi máy chủ. Vui lòng thử lại sau.",
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
@@ -1286,22 +1195,6 @@ const updateJob = async (req, res) => {
     });
   }
 };
-
-module.exports = {
-  approveApplicationRequest,
-  closeMyCompanyJob,
-  createJobRequest,
-  extendMyCompanyJob,
-  getJobApplicationsRequest,
-  getJobDetailRequest,
-  getMyCompanyJobs,
-  getJobTypes,
-  rejectApplicationRequest,
-  reopenMyCompanyJob,
-  updateExpiredJobsRequest,
-  updateJob,
-};
-
 const { getJobsWithPagination } = require("../models/job.model");
 
 const DEFAULT_PAGE = 1;
@@ -1328,6 +1221,14 @@ const getJobs = async (req, res) => {
     const { jobs, total } = await getJobsWithPagination({
       limit,
       offset,
+      name: req.query.name,
+      industryId: req.query.industryId,
+      jobTypeId: req.query.jobTypeId,
+      levelId: req.query.levelId,
+      salaryMin: req.query.salaryMin,
+      salaryMax: req.query.salaryMax,
+      expMin: req.query.expMin,
+      expMax: req.query.expMax,
     });
 
     return res.status(200).json({
@@ -1344,16 +1245,26 @@ const getJobs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Lỗi lấy danh sách việc làm:", error);
-
     return res.status(500).json({
       success: false,
-      message: "Lỗi server. Vui lòng thử lại sau.",
+      message: "Lỗi server.",
       error: error.message,
     });
   }
 };
 
 module.exports = {
+  approveApplicationRequest,
+  closeMyCompanyJob,
+  createJobRequest,
+  extendMyCompanyJob,
+  getJobApplicationsRequest,
+  getJobDetailRequest,
+  getMyCompanyJobs,
+  getJobTypes,
+  rejectApplicationRequest,
+  reopenMyCompanyJob,
+  updateExpiredJobsRequest,
+  updateJob,
   getJobs,
 };

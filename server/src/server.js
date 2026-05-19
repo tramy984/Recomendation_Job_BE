@@ -11,7 +11,7 @@ const companyRoutes = require("./routes/company.routes");
 const industryRoutes = require("./routes/industry.routes");
 const jobRoutes = require("./routes/job.routes");
 const levelRoutes = require("./routes/level.routes");
-
+const candidateRoutes = require("./routes/candidate.routes");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -32,7 +32,7 @@ app.use("/api/companies", companyRoutes);
 app.use("/api/industries", industryRoutes);
 app.use("/api/levels", levelRoutes);
 app.use("/api/jobs", jobRoutes);
-
+app.use("/api/candidate", candidateRoutes);
 app.get("/test-db", async (req, res) => {
   try {
     const result = await pool.query("SELECT NOW()");
