@@ -1,4 +1,5 @@
 const {
+  findCandidateById,
   findCandidateByUserId,
   updateCandidateByUserId,
 } = require("../models/candidate.model");
@@ -40,6 +41,46 @@ const getMyCandidate = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi server.",
+    });
+  }
+};
+
+const getCandidateDetail = async (req, res) => {
+  try {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Chi admin moi co quyen xem ho so ung vien.",
+      });
+    }
+
+    const { candidateId } = req.params;
+
+    if (!isValidId(candidateId)) {
+      return res.status(400).json({
+        success: false,
+        message: "candidateId khong hop le.",
+      });
+    }
+
+    const candidate = await findCandidateById(candidateId);
+
+    if (!candidate) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay candidate.",
+      });
+    }
+
+    return res.status(200).json({
+      candidate,
+    });
+  } catch (error) {
+    console.log("GET CANDIDATE DETAIL ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server.",
     });
   }
 };
@@ -431,6 +472,7 @@ const getMyApplications = async (req, res) => {
 
 module.exports = {
   applyMyJob,
+  getCandidateDetail,
   getMyApplications,
   getMyCandidate,
   getMySavedJobs,

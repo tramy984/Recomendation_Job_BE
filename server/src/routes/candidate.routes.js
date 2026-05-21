@@ -2,6 +2,7 @@ const express = require("express");
 
 const {
   applyMyJob,
+  getCandidateDetail,
   getMyApplications,
   getMyCandidate,
   getMySavedJobs,
@@ -21,6 +22,8 @@ router.get("/me", verifyToken, getMyCandidate);
 router.get("/saved-jobs", verifyToken, getMySavedJobs);
 
 router.get("/applications", verifyToken, getMyApplications);
+
+router.get("/:candidateId", verifyToken, getCandidateDetail);
 
 router.post("/saved-jobs/:jobId", verifyToken, saveMyJob);
 

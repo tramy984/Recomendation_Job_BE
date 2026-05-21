@@ -27,6 +27,35 @@ const findCandidateByUserId = async (userId) => {
   return result.rows[0];
 };
 
+const findCandidateById = async (candidateId) => {
+  const result = await pool.query(
+    `
+    SELECT
+      cp.id,
+      cp.user_id,
+      cp.full_name,
+      u.email,
+      cp.phone,
+      cp.location,
+      cp.gender,
+
+      TO_CHAR(
+        cp.date_of_birth,
+        'YYYY-MM-DD'
+      ) AS date_of_birth,
+
+      cp.avatar
+
+    FROM candidate_profile cp
+    INNER JOIN users u ON u.id = cp.user_id
+    WHERE cp.id = $1
+    `,
+    [candidateId],
+  );
+
+  return result.rows[0];
+};
+
 const updateCandidateByUserId = async ({
   userId,
   fullName,
@@ -91,6 +120,7 @@ const updateCandidateByUserId = async ({
 };
 
 module.exports = {
+  findCandidateById,
   findCandidateByUserId,
   updateCandidateByUserId,
 };

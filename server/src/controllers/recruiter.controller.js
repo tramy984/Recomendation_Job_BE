@@ -50,11 +50,34 @@ const formatCompanyResponse = (req, company) => {
   };
 };
 
+const formatDateOnly = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  if (typeof value === "string") {
+    const [datePart] = value.split("T");
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      return datePart;
+    }
+  }
+
+  return value;
+};
+
 const formatRecruiterResponse = (req, recruiter) => {
   if (!recruiter) return null;
 
   return {
     ...recruiter,
+    date_of_birth: formatDateOnly(recruiter.date_of_birth),
     avatar: getPublicAvatarUrl(req, recruiter.avatar),
     company: formatCompanyResponse(req, recruiter.company),
   };
