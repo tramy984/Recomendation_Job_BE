@@ -9,9 +9,14 @@ const pendingCompanyCertificateUploadDir = path.join(
   __dirname,
   "../../uploads/pending-companies/certificates",
 );
+const pendingCompanyLogoUploadDir = path.join(
+  __dirname,
+  "../../uploads/pending-companies/logos",
+);
 
 fs.mkdirSync(recruiterUploadDir, { recursive: true });
 fs.mkdirSync(pendingCompanyCertificateUploadDir, { recursive: true });
+fs.mkdirSync(pendingCompanyLogoUploadDir, { recursive: true });
 fs.mkdirSync(candidateUploadDir, { recursive: true });
 fs.mkdirSync(cvUploadDir, { recursive: true });
 const recruiterAvatarStorage = multer.diskStorage({
@@ -88,6 +93,47 @@ const pendingCompanyCertificateStorage = multer.diskStorage({
     );
   },
 });
+const pendingCompanyLogoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, pendingCompanyLogoUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const baseName =
+      path
+        .basename(file.originalname, ext)
+        .replace(/[^a-z0-9_-]/gi, "-")
+        .slice(0, 60) || "logo";
+
+    cb(
+      null,
+      `${Date.now()}-${Math.round(Math.random() * 1e9)}-${baseName}${ext}`,
+    );
+  },
+});
+const pendingCompanyFilesStorage = multer.diskStorage({
+  destination: (_req, file, cb) => {
+    if (file.fieldname === "certificate") {
+      return cb(null, pendingCompanyCertificateUploadDir);
+    }
+
+    return cb(null, pendingCompanyLogoUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const fallbackName = file.fieldname === "certificate" ? "certificate" : "logo";
+    const baseName =
+      path
+        .basename(file.originalname, ext)
+        .replace(/[^a-z0-9_-]/gi, "-")
+        .slice(0, 60) || fallbackName;
+
+    cb(
+      null,
+      `${Date.now()}-${Math.round(Math.random() * 1e9)}-${baseName}${ext}`,
+    );
+  },
+});
 
 const uploadRecruiterAvatarFile = multer({
   storage: recruiterAvatarStorage,
@@ -145,6 +191,47 @@ const uploadPendingCompanyCertificateFile = multer({
     }
 
     return cb(null, true);
+  },
+});
+const uploadPendingCompanyLogoFile = multer({
+  storage: pendingCompanyLogoStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("File logo phai la hinh anh."));
+    }
+
+    return cb(null, true);
+  },
+});
+const uploadPendingCompanyFilesFile = multer({
+  storage: pendingCompanyFilesStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (file.fieldname === "logo") {
+      if (!file.mimetype.startsWith("image/")) {
+        return cb(new Error("File logo phai la hinh anh."));
+      }
+
+      return cb(null, true);
+    }
+
+    if (file.fieldname === "certificate") {
+      if (
+        file.mimetype !== "application/pdf" &&
+        path.extname(file.originalname).toLowerCase() !== ".pdf"
+      ) {
+        return cb(new Error("File giay chung nhan phai la PDF."));
+      }
+
+      return cb(null, true);
+    }
+
+    return cb(new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname));
   },
 });
 
@@ -240,9 +327,58 @@ const uploadPendingCompanyCertificate = (req, res, next) => {
     },
   );
 };
+const uploadPendingCompanyLogo = (req, res, next) => {
+  uploadPendingCompanyLogoFile.single("logo")(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (
+      error instanceof multer.MulterError &&
+      error.code === "LIMIT_FILE_SIZE"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "File logo khong duoc vuot qua 5MB.",
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Tai file logo that bai.",
+    });
+  });
+};
+const uploadPendingCompanyFiles = (req, res, next) => {
+  uploadPendingCompanyFilesFile.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "certificate", maxCount: 1 },
+  ])(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (
+      error instanceof multer.MulterError &&
+      error.code === "LIMIT_FILE_SIZE"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "File tai len khong duoc vuot qua 5MB.",
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Tai file that bai.",
+    });
+  });
+};
 
 module.exports = {
   uploadPendingCompanyCertificate,
+  uploadPendingCompanyFiles,
+  uploadPendingCompanyLogo,
   uploadRecruiterAvatar,
   uploadCandidateAvatar,
   uploadCV,
