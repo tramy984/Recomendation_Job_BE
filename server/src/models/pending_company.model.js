@@ -4,15 +4,30 @@ const PENDING_COMPANY_FIELDS = `
   SELECT
     pc.id,
     pc.recruiter_id,
+    jsonb_build_object(
+      'id', r.id,
+      'user_id', r.user_id,
+      'email', u.email,
+      'full_name', r.full_name,
+      'phone', r.phone,
+      'gender', r.gender,
+      'location', r.location,
+      'date_of_birth', r.date_of_birth,
+      'avatar', r.avatar,
+      'company_id', r.company_id,
+      'is_verify_phone', COALESCE(r.is_verify_phone, FALSE)
+    ) AS recruiter,
     pc.name,
     pc.tax_code,
     pc.description,
     pc.location,
+    pc.company_id,
     pc.reviewed_by,
     pc.url_website,
     pc.url_facebook,
     pc.logo,
     pc.certificate,
+    pc.request_type,
     pc.status,
     pc.reject_reason,
     pc.created_at,
@@ -28,6 +43,38 @@ const PENDING_COMPANY_FIELDS = `
     ) AS industries
 `;
 
+const PENDING_COMPANY_GROUP_BY = `
+    GROUP BY
+      pc.id,
+      pc.recruiter_id,
+      r.id,
+      r.user_id,
+      r.full_name,
+      r.phone,
+      r.gender,
+      r.location,
+      r.date_of_birth,
+      r.avatar,
+      r.company_id,
+      r.is_verify_phone,
+      u.email,
+      pc.name,
+      pc.tax_code,
+      pc.description,
+      pc.location,
+      pc.company_id,
+      pc.reviewed_by,
+      pc.url_website,
+      pc.url_facebook,
+      pc.logo,
+      pc.certificate,
+      pc.request_type,
+      pc.status,
+      pc.reject_reason,
+      pc.created_at,
+      pc.reviewed_at
+`;
+
 const getPendingCompanyById = async (pendingCompanyId, client = pool) => {
   if (!pendingCompanyId) return null;
 
@@ -35,12 +82,16 @@ const getPendingCompanyById = async (pendingCompanyId, client = pool) => {
     `
     ${PENDING_COMPANY_FIELDS}
     FROM pending_companies pc
+    INNER JOIN recruiter r
+      ON r.id = pc.recruiter_id
+    LEFT JOIN users u
+      ON u.id = r.user_id
     LEFT JOIN pending_company_industries pci
       ON pci.pending_company_id = pc.id
     LEFT JOIN industry i
       ON i.id = pci.industry_id
     WHERE pc.id = $1
-    GROUP BY pc.id
+    ${PENDING_COMPANY_GROUP_BY}
     `,
     [pendingCompanyId]
   );
@@ -55,12 +106,16 @@ const getPendingCompaniesByRecruiterId = async (recruiterId) => {
     `
     ${PENDING_COMPANY_FIELDS}
     FROM pending_companies pc
+    INNER JOIN recruiter r
+      ON r.id = pc.recruiter_id
+    LEFT JOIN users u
+      ON u.id = r.user_id
     LEFT JOIN pending_company_industries pci
       ON pci.pending_company_id = pc.id
     LEFT JOIN industry i
       ON i.id = pci.industry_id
     WHERE pc.recruiter_id = $1
-    GROUP BY pc.id
+    ${PENDING_COMPANY_GROUP_BY}
     ORDER BY pc.created_at DESC, pc.id DESC
     `,
     [recruiterId]
@@ -74,12 +129,16 @@ const getPendingCompaniesByStatus = async (status = "pending") => {
     `
     ${PENDING_COMPANY_FIELDS}
     FROM pending_companies pc
+    INNER JOIN recruiter r
+      ON r.id = pc.recruiter_id
+    LEFT JOIN users u
+      ON u.id = r.user_id
     LEFT JOIN pending_company_industries pci
       ON pci.pending_company_id = pc.id
     LEFT JOIN industry i
       ON i.id = pci.industry_id
     WHERE pc.status = $1
-    GROUP BY pc.id
+    ${PENDING_COMPANY_GROUP_BY}
     ORDER BY pc.created_at DESC, pc.id DESC
     `,
     [status]
@@ -93,16 +152,54 @@ const getAllPendingCompanies = async () => {
     `
     ${PENDING_COMPANY_FIELDS}
     FROM pending_companies pc
+    INNER JOIN recruiter r
+      ON r.id = pc.recruiter_id
+    LEFT JOIN users u
+      ON u.id = r.user_id
     LEFT JOIN pending_company_industries pci
       ON pci.pending_company_id = pc.id
     LEFT JOIN industry i
       ON i.id = pci.industry_id
-    GROUP BY pc.id
+    ${PENDING_COMPANY_GROUP_BY}
     ORDER BY pc.created_at DESC, pc.id DESC
     `
   );
 
   return result.rows;
+};
+
+const getApprovedCompanyById = async (companyId, client = pool) => {
+  const result = await client.query(
+    `
+    SELECT
+      c.company_id,
+      c.name,
+      c.tax_code,
+      c.description,
+      c.location,
+      c.url_website,
+      c.url_facebook,
+      c.certificate,
+      c.logo,
+      COALESCE(
+        jsonb_agg(
+          DISTINCT jsonb_build_object(
+            'id', i.id,
+            'name', i.name
+          )
+        ) FILTER (WHERE i.id IS NOT NULL),
+        '[]'::jsonb
+      ) AS industries
+    FROM company c
+    LEFT JOIN company_industry ci ON ci.id_company = c.company_id
+    LEFT JOIN industry i ON i.id = ci.id_industry
+    WHERE c.company_id = $1
+    GROUP BY c.company_id
+    `,
+    [companyId]
+  );
+
+  return result.rows[0] || null;
 };
 
 const createPendingCompany = async ({
@@ -111,16 +208,26 @@ const createPendingCompany = async ({
   taxCode = null,
   description = null,
   location = null,
+  companyId = null,
   urlWebsite = null,
   urlFacebook = null,
   logo = null,
   certificate = null,
+  requestType = "create",
   industryIds = [],
 }) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
+
+    await client.query(
+      `
+      DELETE FROM pending_companies
+      WHERE recruiter_id = $1
+      `,
+      [recruiterId]
+    );
 
     const pendingCompanyResult = await client.query(
       `
@@ -130,12 +237,14 @@ const createPendingCompany = async ({
         tax_code,
         description,
         location,
+        company_id,
         url_website,
         url_facebook,
         logo,
-        certificate
+        certificate,
+        request_type
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
       `,
       [
@@ -144,10 +253,12 @@ const createPendingCompany = async ({
         taxCode,
         description,
         location,
+        companyId,
         urlWebsite,
         urlFacebook,
         logo,
         certificate,
+        requestType,
       ]
     );
 
@@ -197,6 +308,7 @@ const updatePendingCompany = async (
       { keys: ["taxCode", "tax_code"], column: "tax_code" },
       { keys: ["description"], column: "description" },
       { keys: ["location"], column: "location" },
+      { keys: ["companyId", "company_id"], column: "company_id" },
       { keys: ["urlWebsite", "url_website"], column: "url_website" },
       { keys: ["urlFacebook", "url_facebook"], column: "url_facebook" },
       { keys: ["logo"], column: "logo" },
@@ -355,34 +467,106 @@ const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
       };
     }
 
-    const companyResult = await client.query(
-      `
-      INSERT INTO company (
-        name,
-        tax_code,
-        description,
-        location,
-        url_website,
-        url_facebook,
-        certificate,
-        logo
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-      `,
-      [
-        pendingCompany.name,
-        pendingCompany.tax_code,
-        pendingCompany.description,
-        pendingCompany.location,
-        pendingCompany.url_website,
-        pendingCompany.url_facebook,
-        pendingCompany.certificate,
-        pendingCompany.logo,
-      ]
+    const approvedPendingCompany = await getPendingCompanyById(
+      pendingCompanyId,
+      client
     );
 
-    const company = companyResult.rows[0];
+    let companyId = pendingCompany.company_id;
+
+    if (pendingCompany.request_type === "update") {
+      if (!companyId) {
+        await client.query("COMMIT");
+        return {
+          pendingCompany: approvedPendingCompany,
+          company: null,
+          invalidRequest: true,
+        };
+      }
+
+      const existingCompanyResult = await client.query(
+        `
+        SELECT company_id
+        FROM company
+        WHERE company_id = $1
+        FOR UPDATE
+        `,
+        [companyId]
+      );
+
+      if (existingCompanyResult.rows.length === 0) {
+        await client.query("COMMIT");
+        return {
+          pendingCompany: approvedPendingCompany,
+          company: null,
+          invalidRequest: true,
+        };
+      }
+
+      await client.query(
+        `
+        UPDATE company
+        SET
+          name = $1,
+          tax_code = $2,
+          description = $3,
+          location = $4,
+          url_website = $5,
+          url_facebook = $6,
+          certificate = $7,
+          logo = $8
+        WHERE company_id = $9
+        `,
+        [
+          pendingCompany.name,
+          pendingCompany.tax_code,
+          pendingCompany.description,
+          pendingCompany.location,
+          pendingCompany.url_website,
+          pendingCompany.url_facebook,
+          pendingCompany.certificate,
+          pendingCompany.logo,
+          companyId,
+        ]
+      );
+
+      await client.query(
+        `
+        DELETE FROM company_industry
+        WHERE id_company = $1
+        `,
+        [companyId]
+      );
+    } else {
+      const companyResult = await client.query(
+        `
+        INSERT INTO company (
+          name,
+          tax_code,
+          description,
+          location,
+          url_website,
+          url_facebook,
+          certificate,
+          logo
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING company_id
+        `,
+        [
+          pendingCompany.name,
+          pendingCompany.tax_code,
+          pendingCompany.description,
+          pendingCompany.location,
+          pendingCompany.url_website,
+          pendingCompany.url_facebook,
+          pendingCompany.certificate,
+          pendingCompany.logo,
+        ]
+      );
+
+      companyId = companyResult.rows[0].company_id;
+    }
 
     await client.query(
       `
@@ -391,7 +575,7 @@ const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
       FROM pending_company_industries pci
       WHERE pci.pending_company_id = $2
       `,
-      [company.company_id, pendingCompanyId]
+      [companyId, pendingCompanyId]
     );
 
     await client.query(
@@ -400,63 +584,88 @@ const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
       SET company_id = $1
       WHERE id = $2
       `,
-      [company.company_id, pendingCompany.recruiter_id]
+      [companyId, pendingCompany.recruiter_id]
     );
 
     await client.query(
       `
-      UPDATE pending_companies
-      SET
-        status = 'approved',
-        reviewed_by = $1,
-        reviewed_at = CURRENT_TIMESTAMP,
-        reject_reason = NULL
-      WHERE id = $2
+      DELETE FROM pending_companies
+      WHERE id = $1
       `,
-      [reviewedBy, pendingCompanyId]
+      [pendingCompanyId]
     );
 
-    const approvedPendingCompany = await getPendingCompanyById(
+    const approvedCompany = await getApprovedCompanyById(companyId, client);
+
+    await client.query("COMMIT");
+
+    return {
+      pendingCompany: {
+        ...approvedPendingCompany,
+        status: "approved",
+        reviewed_by: reviewedBy,
+      },
+      company: approvedCompany,
+      alreadyReviewed: false,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const rejectPendingCompany = async (
+  pendingCompanyId,
+  reviewedBy,
+  rejectReason = null
+) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const pendingCompanyResult = await client.query(
+      `
+      SELECT *
+      FROM pending_companies
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [pendingCompanyId]
+    );
+
+    const pendingCompany = pendingCompanyResult.rows[0];
+
+    if (!pendingCompany) {
+      await client.query("COMMIT");
+      return null;
+    }
+
+    const rejectedPendingCompany = await getPendingCompanyById(
       pendingCompanyId,
       client
     );
 
-    const approvedCompanyResult = await client.query(
+    await client.query(
       `
-      SELECT
-        c.company_id,
-        c.name,
-        c.tax_code,
-        c.description,
-        c.location,
-        c.url_website,
-        c.url_facebook,
-        c.certificate,
-        c.logo,
-        COALESCE(
-          jsonb_agg(
-            DISTINCT jsonb_build_object(
-              'id', i.id,
-              'name', i.name
-            )
-          ) FILTER (WHERE i.id IS NOT NULL),
-          '[]'::jsonb
-        ) AS industries
-      FROM company c
-      LEFT JOIN company_industry ci ON ci.id_company = c.company_id
-      LEFT JOIN industry i ON i.id = ci.id_industry
-      WHERE c.company_id = $1
-      GROUP BY c.company_id
+      DELETE FROM pending_companies
+      WHERE id = $1
       `,
-      [company.company_id]
+      [pendingCompanyId]
     );
 
     await client.query("COMMIT");
 
     return {
-      pendingCompany: approvedPendingCompany,
-      company: approvedCompanyResult.rows[0],
-      alreadyReviewed: false,
+      pendingCompany: {
+        ...rejectedPendingCompany,
+        status: "rejected",
+        reviewed_by: reviewedBy,
+        reviewed_at: new Date(),
+        reject_reason: rejectReason,
+      },
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -473,6 +682,7 @@ module.exports = {
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
   getPendingCompaniesByStatus,
+  rejectPendingCompany,
   updatePendingCompany,
   updatePendingCompanyCertificateByRecruiterId,
 };

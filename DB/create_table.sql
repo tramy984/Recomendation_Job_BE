@@ -83,12 +83,13 @@ CREATE TABLE phone_verification_codes (
 CREATE INDEX idx_phone_verification_active
     ON phone_verification_codes(user_id, phone, consumed_at, created_at);
 CREATE TABLE pending_companies (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL,
     recruiter_id BIGINT NOT NULL,
     name VARCHAR(255) NOT NULL,
     tax_code VARCHAR(255),
     description TEXT,
     location VARCHAR(255),
+    company_id BIGINT,
     reviewed_by BIGINT,
     url_website VARCHAR(500),
     url_facebook VARCHAR(500),
@@ -97,6 +98,8 @@ CREATE TABLE pending_companies (
 
     certificate TEXT,
 
+    request_type VARCHAR(50) DEFAULT 'create',
+
     status VARCHAR(50) DEFAULT 'pending'
         CHECK (status IN ('pending', 'approved', 'rejected')),
 
@@ -104,9 +107,18 @@ CREATE TABLE pending_companies (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     reviewed_at TIMESTAMP,
+    CONSTRAINT pending_companies_pkey
+        PRIMARY KEY (recruiter_id),
+    CONSTRAINT uq_pending_companies_id
+        UNIQUE (id),
+    CONSTRAINT chk_pending_companies_request_type
+        CHECK (request_type IN ('create', 'update')),
     CONSTRAINT fk_pending_company_recruiter
         FOREIGN KEY (recruiter_id)
         REFERENCES recruiter(id),
+    CONSTRAINT fk_pending_company_company
+        FOREIGN KEY (company_id)
+        REFERENCES company(company_id),
     CONSTRAINT fk_pending_company_reviewed_by
         FOREIGN KEY (reviewed_by)
         REFERENCES users(id)

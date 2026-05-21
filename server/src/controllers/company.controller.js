@@ -4,6 +4,7 @@ const {
   getCompaniesByExactName,
   getCompaniesByName,
   getCompanyByRecruiterUserId,
+  updateCompanyById,
 } = require("../models/company.model");
 
 const {
@@ -12,6 +13,7 @@ const {
   getAllPendingCompanies,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
+  rejectPendingCompany,
   updatePendingCompany,
   updatePendingCompanyCertificateByRecruiterId,
 } = require("../models/pending_company.model");
@@ -68,6 +70,23 @@ const getPendingCompanyCertificateUrl = (file) => {
   return `/uploads/pending-companies/certificates/${file.filename}`;
 };
 
+const getPendingCompanyLogoUrl = (file) => {
+  if (!file) return null;
+
+  return `/uploads/pending-companies/logos/${file.filename}`;
+};
+
+const getUploadedFile = (req, fieldName) => {
+  if (req.file?.fieldname === fieldName) return req.file;
+  if (!req.files?.[fieldName]?.length) return null;
+
+  return req.files[fieldName][0];
+};
+
+const isBlobUrl = (value) => {
+  return typeof value === "string" && value.trim().startsWith("blob:");
+};
+
 const getPublicUrl = (req, value) => {
   if (!value || typeof value !== "string") return value || null;
 
@@ -89,6 +108,12 @@ const formatPendingCompanyResponse = (req, pendingCompany) => {
     ...pendingCompany,
     logo: getPublicUrl(req, pendingCompany.logo),
     certificate: getPublicUrl(req, pendingCompany.certificate),
+    recruiter: pendingCompany.recruiter
+      ? {
+          ...pendingCompany.recruiter,
+          avatar: getPublicUrl(req, pendingCompany.recruiter.avatar),
+        }
+      : null,
   };
 };
 
@@ -354,6 +379,19 @@ const approvePendingCompanyRequest = async (req, res) => {
       });
     }
 
+    if (result.invalidRequest) {
+      return res.status(400).json({
+        success: false,
+        message: "Yêu cầu công ty không hợp lệ hoặc công ty cần cập nhật không tồn tại.",
+        data: {
+          pendingCompany: formatPendingCompanyResponse(
+            req,
+            result.pendingCompany
+          ),
+        },
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: "Xác nhận công ty thành công.",
@@ -371,6 +409,72 @@ const approvePendingCompanyRequest = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
+const rejectPendingCompanyRequest = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { pendingCompanyId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin ngÆ°á»i dÃ¹ng.",
+      });
+    }
+
+    if (role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "TÃ i khoáº£n cá»§a báº¡n khÃ´ng cÃ³ quyá»n tá»« chá»‘i yÃªu cáº§u cÃ´ng ty.",
+      });
+    }
+
+    if (!isValidId(pendingCompanyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "pendingCompanyId khÃ´ng há»£p lá»‡.",
+      });
+    }
+
+    const payload = getPendingCompanyPayload(req.body);
+    const rejectReason = normalizeOptionalText(
+      payload.rejectReason ?? payload.reject_reason ?? payload.reason
+    );
+
+    const result = await rejectPendingCompany(
+      pendingCompanyId,
+      userId,
+      rejectReason
+    );
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "KhÃ´ng tÃ¬m tháº¥y yÃªu cáº§u cÃ´ng ty.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Tá»« chá»‘i yÃªu cáº§u cÃ´ng ty thÃ nh cÃ´ng.",
+      data: {
+        pendingCompany: formatPendingCompanyResponse(
+          req,
+          result.pendingCompany
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("Lá»—i tá»« chá»‘i yÃªu cáº§u cÃ´ng ty chá» duyá»‡t:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lá»—i server. Vui lÃ²ng thá»­ láº¡i sau.",
       error: error.message,
     });
   }
@@ -442,6 +546,31 @@ const updatePendingCompanyRequest = async (req, res) => {
 
     const payload = getPendingCompanyPayload(req.body);
     const updateData = {};
+    const uploadedLogo = getPendingCompanyLogoUrl(
+      getUploadedFile(req, "logo")
+    );
+    const uploadedCertificate = getPendingCompanyCertificateUrl(
+      getUploadedFile(req, "certificate")
+    );
+
+    if (!uploadedLogo && isBlobUrl(payload.logo)) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng gửi file logo bằng multipart/form-data field logo, không gửi blob URL.",
+      });
+    }
+
+    if (
+      !uploadedCertificate &&
+      (isBlobUrl(payload.certificate) ||
+        isBlobUrl(payload.certificateUrl) ||
+        isBlobUrl(payload.certificate_url))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng gửi file giấy chứng nhận bằng multipart/form-data field certificate, không gửi blob URL.",
+      });
+    }
 
     if (hasOwn(payload, "name")) {
       const name = normalizeOptionalText(payload.name);
@@ -486,11 +615,15 @@ const updatePendingCompanyRequest = async (req, res) => {
       );
     }
 
-    if (hasOwn(payload, "logo")) {
+    if (uploadedLogo) {
+      updateData.logo = uploadedLogo;
+    } else if (hasOwn(payload, "logo")) {
       updateData.logo = normalizeOptionalText(payload.logo);
     }
 
-    if (
+    if (uploadedCertificate) {
+      updateData.certificate = uploadedCertificate;
+    } else if (
       hasAnyOwn(payload, [
         "certificate",
         "certificateUrl",
@@ -580,7 +713,9 @@ const updatePendingCompanyCertificate = async (req, res) => {
       });
     }
 
-    const uploadedCertificate = getPendingCompanyCertificateUrl(req.file);
+    const uploadedCertificate = getPendingCompanyCertificateUrl(
+      getUploadedFile(req, "certificate")
+    );
     const payload = getPendingCompanyPayload(req.body);
 
     const hasCertificate =
@@ -666,7 +801,46 @@ const createPendingCompanyRequest = async (req, res) => {
     }
 
     const payload = getPendingCompanyPayload(req.body);
-    const name = typeof payload.name === "string" ? payload.name.trim() : "";
+    const uploadedLogo = getPendingCompanyLogoUrl(
+      getUploadedFile(req, "logo")
+    );
+    const uploadedCertificate = getPendingCompanyCertificateUrl(
+      getUploadedFile(req, "certificate")
+    );
+
+    if (!uploadedLogo && isBlobUrl(payload.logo)) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng gửi file logo bằng multipart/form-data field logo, không gửi blob URL.",
+      });
+    }
+
+    if (
+      !uploadedCertificate &&
+      (isBlobUrl(payload.certificate) ||
+        isBlobUrl(payload.certificateUrl) ||
+        isBlobUrl(payload.certificate_url))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng gửi file giấy chứng nhận bằng multipart/form-data field certificate, không gửi blob URL.",
+      });
+    }
+
+    const currentCompany = recruiter.company_id
+      ? await getCompanyById(recruiter.company_id)
+      : null;
+    const forcedRequestType = req.pendingCompanyRequestType;
+
+    if (forcedRequestType === "update" && !currentCompany) {
+      return res.status(400).json({
+        success: false,
+        message: "Nhà tuyển dụng chưa có công ty để tạo yêu cầu chỉnh sửa.",
+      });
+    }
+
+    const requestType = forcedRequestType || (currentCompany ? "update" : "create");
+    const name = normalizeOptionalText(payload.name ?? currentCompany?.name);
 
     const rawCertificate =
       payload.certificate ??
@@ -674,12 +848,23 @@ const createPendingCompanyRequest = async (req, res) => {
       payload.certificate_url;
 
     const certificate =
-      typeof rawCertificate === "string"
-        ? rawCertificate.trim() || null
-        : rawCertificate || null;
+      uploadedCertificate ??
+      normalizeOptionalText(rawCertificate) ??
+      currentCompany?.certificate ??
+      null;
+
+    const existingIndustryIds = Array.isArray(currentCompany?.industries)
+      ? currentCompany.industries.map((industry) => industry.id)
+      : [];
+    const hasIndustryIds = hasAnyOwn(payload, [
+      "industryIds",
+      "industry_ids",
+    ]);
 
     const industryIds = normalizeIndustryIds(
-      payload.industryIds || payload.industry_ids
+      hasIndustryIds
+        ? payload.industryIds || payload.industry_ids
+        : existingIndustryIds
     );
 
     if (!name) {
@@ -699,13 +884,34 @@ const createPendingCompanyRequest = async (req, res) => {
     const pendingCompany = await createPendingCompany({
       recruiterId: recruiter.id,
       name,
-      taxCode: payload.taxCode || payload.tax_code || null,
-      description: payload.description || null,
-      location: payload.location || null,
-      urlWebsite: payload.urlWebsite || payload.url_website || null,
-      urlFacebook: payload.urlFacebook || payload.url_facebook || null,
-      logo: payload.logo || null,
+      companyId: currentCompany?.company_id || null,
+      taxCode:
+        normalizeOptionalText(payload.taxCode ?? payload.tax_code) ??
+        currentCompany?.tax_code ??
+        null,
+      description:
+        normalizeOptionalText(payload.description) ??
+        currentCompany?.description ??
+        null,
+      location:
+        normalizeOptionalText(payload.location) ??
+        currentCompany?.location ??
+        null,
+      urlWebsite:
+        normalizeOptionalText(payload.urlWebsite ?? payload.url_website) ??
+        currentCompany?.url_website ??
+        null,
+      urlFacebook:
+        normalizeOptionalText(payload.urlFacebook ?? payload.url_facebook) ??
+        currentCompany?.url_facebook ??
+        null,
+      logo:
+        uploadedLogo ??
+        normalizeOptionalText(payload.logo) ??
+        currentCompany?.logo ??
+        null,
       certificate,
+      requestType,
       industryIds,
     });
 
@@ -725,6 +931,11 @@ const createPendingCompanyRequest = async (req, res) => {
       error: error.message,
     });
   }
+};
+
+const createPendingCompanyUpdateRequest = async (req, res) => {
+  req.pendingCompanyRequestType = "update";
+  return createPendingCompanyRequest(req, res);
 };
 
 const getCompanyDetail = async (req, res) => {
@@ -810,17 +1021,142 @@ const getMyCompany = async (req, res) => {
     });
   }
 };
+const updateCompanyRequest = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const { companyId } = req.params;
 
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Không tìm thấy thông tin người dùng.",
+      });
+    }
+
+    if (role !== "admin" && role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản của bạn không có quyền cập nhật công ty.",
+      });
+    }
+
+    if (!isValidId(companyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId không hợp lệ.",
+      });
+    }
+
+    const payload = getPendingCompanyPayload(req.body);
+
+    const uploadedLogo = getPendingCompanyLogoUrl(getUploadedFile(req, "logo"));
+    const uploadedCertificate = getPendingCompanyCertificateUrl(
+      getUploadedFile(req, "certificate")
+    );
+
+    if (!uploadedLogo && isBlobUrl(payload.logo)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Vui lòng gửi file logo bằng multipart/form-data field logo, không gửi blob URL.",
+      });
+    }
+
+    if (
+      !uploadedCertificate &&
+      (isBlobUrl(payload.certificate) ||
+        isBlobUrl(payload.certificateUrl) ||
+        isBlobUrl(payload.certificate_url))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Vui lòng gửi file giấy chứng nhận bằng multipart/form-data field certificate, không gửi blob URL.",
+      });
+    }
+
+    const name = normalizeOptionalText(payload.name);
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên công ty không được để trống.",
+      });
+    }
+
+    const hasIndustryIds = hasAnyOwn(payload, ["industryIds", "industry_ids"]);
+    const industryIds = hasIndustryIds
+      ? normalizeIndustryIds(payload.industryIds || payload.industry_ids)
+      : undefined;
+
+    if (hasIndustryIds && industryIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng chọn ít nhất 1 lĩnh vực hoạt động của công ty.",
+      });
+    }
+
+    const company = await updateCompanyById({
+      companyId,
+      name,
+      taxCode: normalizeOptionalText(payload.taxCode ?? payload.tax_code),
+      description: normalizeOptionalText(payload.description),
+      location: normalizeOptionalText(payload.location),
+      urlWebsite: normalizeOptionalText(
+        payload.urlWebsite ?? payload.url_website
+      ),
+      urlFacebook: normalizeOptionalText(
+        payload.urlFacebook ?? payload.url_facebook
+      ),
+      logo: uploadedLogo ?? normalizeOptionalText(payload.logo),
+      certificate:
+        uploadedCertificate ??
+        normalizeOptionalText(
+          payload.certificate ??
+            payload.certificateUrl ??
+            payload.certificate_url
+        ),
+      industryIds,
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin công ty.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật công ty thành công.",
+      data: {
+        company: formatCompanyResponse(req, company),
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi cập nhật công ty:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
 module.exports = {
   approvePendingCompanyRequest,
   createPendingCompanyRequest,
+  createPendingCompanyUpdateRequest,
   getCompanies,
   getCompanyDetail,
   getCompaniesByNameFromCompanyTable,
   getMyPendingCompanies,
   getMyCompany,
   getPendingCompaniesWaitingConfirmation,
+  rejectPendingCompanyRequest,
   searchCompaniesByName,
   updatePendingCompanyCertificate,
   updatePendingCompanyRequest,
+  updateCompanyRequest,
 };

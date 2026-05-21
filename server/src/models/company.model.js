@@ -162,11 +162,93 @@ const getCompanyByRecruiterUserId = async (userId) => {
 
   return result.rows[0] || null;
 };
+const updateCompanyById = async ({
+  companyId,
+  name,
+  taxCode = null,
+  description = null,
+  location = null,
+  urlWebsite = null,
+  urlFacebook = null,
+  certificate = null,
+  logo = null,
+  industryIds = [],
+}) => {
+  if (!companyId) return null;
 
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `
+      UPDATE company
+      SET
+        name = COALESCE($2, name),
+        tax_code = COALESCE($3, tax_code),
+        description = COALESCE($4, description),
+        location = COALESCE($5, location),
+        url_website = COALESCE($6, url_website),
+        url_facebook = COALESCE($7, url_facebook),
+        certificate = COALESCE($8, certificate),
+        logo = COALESCE($9, logo)
+      WHERE company_id = $1
+      RETURNING company_id
+      `,
+      [
+        companyId,
+        name,
+        taxCode,
+        description,
+        location,
+        urlWebsite,
+        urlFacebook,
+        certificate,
+        logo,
+      ]
+    );
+
+    if (!result.rows[0]) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    if (Array.isArray(industryIds)) {
+      await client.query(
+        `
+        DELETE FROM company_industry
+        WHERE id_company = $1
+        `,
+        [companyId]
+      );
+
+      for (const industryId of industryIds) {
+        await client.query(
+          `
+          INSERT INTO company_industry (id_company, id_industry)
+          VALUES ($1, $2)
+          `,
+          [companyId, industryId]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return getCompanyById(companyId);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
 module.exports = {
   getAllCompanies,
   getCompanyById,
   getCompaniesByExactName,
   getCompaniesByName,
   getCompanyByRecruiterUserId,
+  updateCompanyById,
 };
