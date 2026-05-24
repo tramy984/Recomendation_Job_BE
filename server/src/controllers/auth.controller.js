@@ -293,7 +293,7 @@ const checkEmailRegistered = async (req, res) => {
     if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email khong hop le.",
+        message: "Email không hợp lệ.",
       });
     }
 
@@ -302,19 +302,19 @@ const checkEmailRegistered = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: user
-        ? "Email da duoc dang ky tai khoan."
-        : "Email chua duoc dang ky tai khoan.",
+        ? "Email đã được đăng ký tài khoản."
+        : "Email chưa được đăng ký tài khoản.",
       data: {
         email,
         isRegistered: Boolean(user),
       },
     });
   } catch (error) {
-    console.error("Loi kiem tra email dang ky:", error);
+    console.error("Lỗi kiểm tra email đăng ký:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
@@ -409,7 +409,7 @@ const requestEmailOtp = async (req, res) => {
     if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email khong hop le.",
+        message: "Email không hợp lệ.",
       });
     }
 
@@ -430,8 +430,8 @@ const requestEmailOtp = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: emailSent
-        ? "Da gui ma OTP den email. Vui long xem them OTP trong terminal backend de test."
-        : "Da tao ma OTP. SMTP chua cau hinh nen hay xem OTP trong terminal backend.",
+        ? "Đã gửi mã OTP đến email. Vui lòng xem thêm OTP trong terminal backend để test."
+        : "Đã tạo mã OTP. SMTP chưa cấu hình nên hay xem OTP trong terminal backend.",
       data: {
         email,
         emailSent,
@@ -439,11 +439,11 @@ const requestEmailOtp = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Loi gui OTP xac thuc email:", error);
+    console.error("Lỗi gửi OTP xác thực email:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
@@ -457,7 +457,7 @@ const verifyEmailOtp = async (req, res) => {
     if (!email || !/^\d{6}$/.test(otp)) {
       return res.status(400).json({
         success: false,
-        message: "Email hoac ma OTP khong hop le.",
+        message: "Email hoặc mã OTP không hợp lệ.",
       });
     }
 
@@ -466,7 +466,7 @@ const verifyEmailOtp = async (req, res) => {
     if (!verificationCode) {
       return res.status(400).json({
         success: false,
-        message: "Ma OTP khong ton tai hoac da het han.",
+        message: "Mã OTP không tồn tại hoặc đã hết hạn.",
       });
     }
 
@@ -475,7 +475,7 @@ const verifyEmailOtp = async (req, res) => {
 
       return res.status(429).json({
         success: false,
-        message: "Ban da nhap sai OTP qua nhieu lan. Hay gui lai ma moi.",
+        message: "Bạn đã nhập sai OTP quá nhiều lần. Hãy gửi lại mã mới.",
       });
     }
 
@@ -488,7 +488,7 @@ const verifyEmailOtp = async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: "Ma OTP khong dung.",
+        message: "Mã OTP không đúng.",
         data: {
           remainingAttempts: Math.max(
             OTP_MAX_ATTEMPTS - (updatedCode?.attempts || 0),
@@ -502,17 +502,17 @@ const verifyEmailOtp = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Xac thuc email thanh cong.",
+      message: "Xác thực email thành công.",
       data: {
         email,
       },
     });
   } catch (error) {
-    console.error("Loi xac thuc OTP email:", error);
+    console.error("Lỗi xác thực OTP email:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
