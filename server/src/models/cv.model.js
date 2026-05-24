@@ -1,5 +1,21 @@
 const pool = require("../config/db");
 
+let tableReadyPromise = null;
+
+const ensureCVTableDefaults = () => {
+  if (!tableReadyPromise) {
+    tableReadyPromise = pool.query(`
+      ALTER TABLE cvs
+        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+      ALTER TABLE cvs
+        ALTER COLUMN is_default SET DEFAULT FALSE;
+    `);
+  }
+
+  return tableReadyPromise;
+};
+
 const findCandidateIdByUserId = async (userId) => {
   const result = await pool.query(
     `
@@ -64,6 +80,8 @@ const findCVByIdAndCandidateId = async (cvId, candidateId) => {
 };
 
 const createCV = async ({ candidateId, fileUrl, isDefault }) => {
+  await ensureCVTableDefaults();
+
   const client = await pool.connect();
 
   try {
@@ -85,9 +103,10 @@ const createCV = async ({ candidateId, fileUrl, isDefault }) => {
       INSERT INTO cvs (
         candidate_id,
         file_url,
-        is_default
+        is_default,
+        created_at
       )
-      VALUES ($1, $2, $3)
+      VALUES ($1, $2, $3, NOW())
       RETURNING
         id,
         candidate_id,

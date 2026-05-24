@@ -20,6 +20,12 @@ const ensurePhoneVerificationTable = () => {
           ON DELETE CASCADE
       );
 
+      ALTER TABLE phone_verification_codes
+        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+      ALTER TABLE phone_verification_codes
+        ALTER COLUMN attempts SET DEFAULT 0;
+
       CREATE INDEX IF NOT EXISTS idx_phone_verification_active
         ON phone_verification_codes(user_id, phone, consumed_at, created_at);
     `);
@@ -50,8 +56,8 @@ const createPhoneVerificationCode = async ({
   const result = await pool.query(
     `
     INSERT INTO phone_verification_codes
-      (user_id, phone, otp_hash, expires_at)
-    VALUES ($1, $2, $3, $4)
+      (user_id, phone, otp_hash, expires_at, attempts, created_at)
+    VALUES ($1, $2, $3, $4, 0, NOW())
     RETURNING id, user_id, phone, expires_at, attempts, created_at
     `,
     [userId, phone, otpHash, expiresAt]

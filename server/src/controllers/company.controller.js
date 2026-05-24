@@ -19,6 +19,9 @@ const {
 } = require("../models/pending_company.model");
 
 const { getRecruiterByUserId } = require("../models/recruiter.model");
+const {
+  notifyPendingCompanyReviewed,
+} = require("../services/notification.service");
 
 const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
@@ -392,6 +395,12 @@ const approvePendingCompanyRequest = async (req, res) => {
       });
     }
 
+    await notifyPendingCompanyReviewed({
+      senderId: userId,
+      pendingCompany: result.pendingCompany,
+      isApproved: true,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Xác nhận công ty thành công.",
@@ -423,21 +432,21 @@ const rejectPendingCompanyRequest = async (req, res) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin ngÆ°á»i dÃ¹ng.",
+        message: "Không tìm thấy thông tin người dùng.",
       });
     }
 
     if (role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "TÃ i khoáº£n cá»§a báº¡n khÃ´ng cÃ³ quyá»n tá»« chá»‘i yÃªu cáº§u cÃ´ng ty.",
+        message: "Tài khoản của bạn không có quyền từ chối yêu cầu công ty.",
       });
     }
 
     if (!isValidId(pendingCompanyId)) {
       return res.status(400).json({
         success: false,
-        message: "pendingCompanyId khÃ´ng há»£p lá»‡.",
+        message: "pendingCompanyId không hợp lệ.",
       });
     }
 
@@ -455,13 +464,19 @@ const rejectPendingCompanyRequest = async (req, res) => {
     if (!result) {
       return res.status(404).json({
         success: false,
-        message: "KhÃ´ng tÃ¬m tháº¥y yÃªu cáº§u cÃ´ng ty.",
+        message: "Không tìm thấy yêu cầu công ty.",
       });
     }
 
+    await notifyPendingCompanyReviewed({
+      senderId: userId,
+      pendingCompany: result.pendingCompany,
+      isApproved: false,
+    });
+
     return res.status(200).json({
       success: true,
-      message: "Tá»« chá»‘i yÃªu cáº§u cÃ´ng ty thÃ nh cÃ´ng.",
+      message: "Từ chối yêu cầu công ty thành công.",
       data: {
         pendingCompany: formatPendingCompanyResponse(
           req,
@@ -470,11 +485,11 @@ const rejectPendingCompanyRequest = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Lá»—i tá»« chá»‘i yÃªu cáº§u cÃ´ng ty chá» duyá»‡t:", error);
+    console.error("Lỗi từ chối yêu cầu công ty chờ duyệt:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Lá»—i server. Vui lÃ²ng thá»­ láº¡i sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

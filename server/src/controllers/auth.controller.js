@@ -103,17 +103,17 @@ const getMailTransporter = () => {
 
 const sendEmailOtp = async ({ email, otp }) => {
   console.log("======================================");
-  console.log("OTP XAC THUC EMAIL");
+  console.log("OTP XÁC THỰC EMAIL");
   console.log("Email:", email);
-  console.log("Ma OTP:", otp);
-  console.log("Hieu luc:", OTP_EXPIRES_IN_MINUTES, "phut");
+  console.log("Mã OTP:", otp);
+  console.log("Hiệu lực:", OTP_EXPIRES_IN_MINUTES, "phút");
   console.log("======================================");
 
   const transporter = getMailTransporter();
 
   if (!transporter) {
     console.log(
-      "SMTP chua duoc cau hinh, bo qua buoc gui email that. Hay xem OTP o terminal."
+      "SMTP chưa được cấu hình, bỏ qua bước gửi email thật. Hãy xem OTP ở terminal."
     );
     return false;
   }
@@ -121,12 +121,12 @@ const sendEmailOtp = async ({ email, otp }) => {
   await transporter.sendMail({
     from: process.env.MAIL_FROM || process.env.SMTP_USER,
     to: email,
-    subject: "Ma OTP xac thuc email",
-    text: `Ma OTP cua ban la ${otp}. Ma co hieu luc trong ${OTP_EXPIRES_IN_MINUTES} phut.`,
+    subject: "Mã OTP xác thực email",
+    text: `Mã OTP của bạn là ${otp}. Mã có hiệu lực trong ${OTP_EXPIRES_IN_MINUTES} phút.`,
     html: `
-      <p>Ma OTP cua ban la:</p>
+      <p>Mã OTP của bạn là:</p>
       <h2>${otp}</h2>
-      <p>Ma co hieu luc trong ${OTP_EXPIRES_IN_MINUTES} phut.</p>
+      <p>Mã có hiệu lực trong ${OTP_EXPIRES_IN_MINUTES} phút.</p>
     `,
   });
 
@@ -572,7 +572,7 @@ const requestPhoneOtp = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Đã tạo mã OTP. Vui lòng xem OTP trong terminal backend.",
+      message: "Đã tạo mã OTP.",
       data: {
         phone,
         expiresInMinutes: OTP_EXPIRES_IN_MINUTES,

@@ -179,6 +179,84 @@ const getJobsByCompanyId = async (companyId, filters = {}) => {
   return result.rows;
 };
 
+const getJobsByRecruiterId = async (recruiterId, filters = {}) => {
+  if (!recruiterId) return [];
+
+  const values = [recruiterId];
+  const whereClauses = ["j.recruiter_id = $1"];
+
+  if (filters.name) {
+    values.push(`%${filters.name}%`);
+    whereClauses.push(`j.name ILIKE $${values.length}`);
+  }
+
+  if (filters.status !== undefined) {
+    values.push(filters.status);
+    whereClauses.push(`j.status = $${values.length}`);
+  }
+
+  if (filters.industryIds?.length > 0) {
+    values.push(filters.industryIds);
+    whereClauses.push(
+      `
+      EXISTS (
+        SELECT 1
+        FROM job_industry filter_ji
+        WHERE filter_ji.job_id = j.id
+          AND filter_ji.industry_id = ANY($${values.length}::bigint[])
+      )
+      `,
+    );
+  }
+
+  if (filters.industryName) {
+    values.push(`%${filters.industryName}%`);
+    whereClauses.push(
+      `
+      EXISTS (
+        SELECT 1
+        FROM job_industry filter_ji
+        INNER JOIN industry filter_i
+          ON filter_i.id = filter_ji.industry_id
+        WHERE filter_ji.job_id = j.id
+          AND filter_i.name ILIKE $${values.length}
+      )
+      `,
+    );
+  }
+
+  const result = await pool.query(
+    `
+    SELECT
+      j.*,
+      lt.name AS level_name,
+      jt.name AS job_type_name,
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', i.id,
+              'name', i.name
+            )
+          )
+          FROM job_industry ji
+          INNER JOIN industry i ON i.id = ji.industry_id
+          WHERE ji.job_id = j.id
+        ),
+        '[]'::jsonb
+      ) AS industries
+    FROM jobs j
+    LEFT JOIN level_table lt ON lt.id = j.id_level
+    LEFT JOIN job_type jt ON jt.id = j.job_type_id
+    WHERE ${whereClauses.join(" AND ")}
+    ORDER BY j.created_at DESC, j.id DESC
+    `,
+    values,
+  );
+
+  return result.rows;
+};
+
 const getJobApplicationsByJobId = async (jobId) => {
   if (!jobId) return [];
 
@@ -710,6 +788,7 @@ module.exports = {
   getJobApplicationsByJobId,
   getJobById,
   getJobsByCompanyId,
+  getJobsByRecruiterId,
   updateApplicationReviewById,
   updateExpiredJobsStatus,
   updateJobExpireById,

@@ -6,17 +6,17 @@ const getLevels = async (_req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lay danh sach cap do thanh cong.",
+      message: "Lấy danh sách cấp độ thành công.",
       data: {
         levels,
       },
     });
   } catch (error) {
-    console.error("Loi lay danh sach cap do:", error);
+    console.error("Lỗi lấy danh sách cấp độ:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

@@ -75,15 +75,6 @@ const uploadMyCV = async (req, res) => {
 
     const totalCV = await countCVByCandidateId(candidateId);
 
-    if (totalCV >= 5) {
-      removeOldFile(`/uploads/cvs/${req.file.filename}`);
-
-      return res.status(400).json({
-        success: false,
-        message: "Bạn chỉ được lưu tối đa 5 CV.",
-      });
-    }
-
     const fileUrl = `/uploads/cvs/${req.file.filename}`;
 
     const cv = await createCV({

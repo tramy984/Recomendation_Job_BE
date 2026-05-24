@@ -263,8 +263,12 @@ CREATE TABLE notifications (
     receiver_id BIGINT,
     title VARCHAR(255),
     content TEXT,
+    type VARCHAR(100),
+    reference_type VARCHAR(100),
+    reference_id BIGINT,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP,
     CONSTRAINT fk_notification_sender
         FOREIGN KEY (sender_id)
         REFERENCES users(id),
@@ -272,3 +276,7 @@ CREATE TABLE notifications (
         FOREIGN KEY (receiver_id)
         REFERENCES users(id)
 );
+CREATE INDEX idx_notifications_receiver
+    ON notifications(receiver_id, created_at DESC, id DESC);
+CREATE INDEX idx_notifications_reference
+    ON notifications(receiver_id, type, reference_type, reference_id);

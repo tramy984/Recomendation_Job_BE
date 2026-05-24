@@ -41,7 +41,7 @@ const readAllNotifications = async (req, res) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Chua dang nhap.",
+        message: "Chưa đăng nhập.",
       });
     }
 
@@ -49,18 +49,18 @@ const readAllNotifications = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Da danh dau tat ca thong bao la da doc.",
+      message: "Đã đánh dấu tất cả thông báo là đã đọc.",
       data: {
         updatedCount: notifications.length,
         notifications,
       },
     });
   } catch (error) {
-    console.error("Loi danh dau tat ca thong bao la da doc:", error);
+    console.error("Lỗi đánh dấu tất cả thông báo là đã đọc:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

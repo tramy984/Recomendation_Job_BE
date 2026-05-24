@@ -223,6 +223,18 @@ const createPendingCompany = async ({
 
     await client.query(
       `
+      DELETE FROM pending_company_industries
+      WHERE pending_company_id IN (
+        SELECT id
+        FROM pending_companies
+        WHERE recruiter_id = $1
+      )
+      `,
+      [recruiterId]
+    );
+
+    await client.query(
+      `
       DELETE FROM pending_companies
       WHERE recruiter_id = $1
       `,
@@ -589,6 +601,14 @@ const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
 
     await client.query(
       `
+      DELETE FROM pending_company_industries
+      WHERE pending_company_id = $1
+      `,
+      [pendingCompanyId]
+    );
+
+    await client.query(
+      `
       DELETE FROM pending_companies
       WHERE id = $1
       `,
@@ -646,6 +666,14 @@ const rejectPendingCompany = async (
     const rejectedPendingCompany = await getPendingCompanyById(
       pendingCompanyId,
       client
+    );
+
+    await client.query(
+      `
+      DELETE FROM pending_company_industries
+      WHERE pending_company_id = $1
+      `,
+      [pendingCompanyId]
     );
 
     await client.query(

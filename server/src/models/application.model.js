@@ -1,5 +1,18 @@
 const pool = require("../config/db");
 
+let tableReadyPromise = null;
+
+const ensureApplicationTableDefaults = () => {
+  if (!tableReadyPromise) {
+    tableReadyPromise = pool.query(`
+      ALTER TABLE applications
+        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+    `);
+  }
+
+  return tableReadyPromise;
+};
+
 const getApplicationById = async (applicationId, client = pool) => {
   if (!applicationId) return null;
 
@@ -49,6 +62,8 @@ const getApplicationById = async (applicationId, client = pool) => {
 
 const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
   if (!candidateId || !jobId) return null;
+
+  await ensureApplicationTableDefaults();
 
   const client = await pool.connect();
 
@@ -142,9 +157,10 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
         candidate_id,
         cv_id,
         job_id,
-        status
+        status,
+        created_at
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, $4, NOW())
       RETURNING id
       `,
       [candidateId, cv.id, jobId, "pending"],

@@ -30,7 +30,7 @@ const updateAccountStatus = async (req, res, status) => {
     if (req.user?.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Chi admin moi co quyen cap nhat trang thai tai khoan.",
+        message: "Chỉ admin mới có quyền cập nhật trạng thái tài khoản.",
       });
     }
 
@@ -39,14 +39,14 @@ const updateAccountStatus = async (req, res, status) => {
     if (!isValidId(userId)) {
       return res.status(400).json({
         success: false,
-        message: "userId khong hop le.",
+        message: "userId không hợp lệ.",
       });
     }
 
     if (Number(userId) === Number(req.user?.id) && status === false) {
       return res.status(400).json({
         success: false,
-        message: "Khong the khoa chinh tai khoan dang dang nhap.",
+        message: "Không thể khóa chính tài khoản đang đăng nhập.",
       });
     }
 
@@ -55,7 +55,7 @@ const updateAccountStatus = async (req, res, status) => {
     if (!currentUser) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay tai khoan.",
+        message: "Không tìm thấy tài khoản.",
       });
     }
 
@@ -64,18 +64,18 @@ const updateAccountStatus = async (req, res, status) => {
     return res.status(200).json({
       success: true,
       message: status
-        ? "Mo tai khoan thanh cong."
-        : "Khoa tai khoan thanh cong.",
+        ? "Mở tài khoản thành công."
+        : "Khóa tài khoản thành công.",
       data: {
         user,
       },
     });
   } catch (error) {
-    console.error("Loi cap nhat trang thai tai khoan:", error);
+    console.error("Lỗi cập nhật trạng thái tài khoản:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi may chu. Vui long thu lai sau.",
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
@@ -94,7 +94,7 @@ const getDashboard = async (req, res) => {
     if (req.user?.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Chi admin moi co quyen xem dashboard.",
+        message: "Chỉ admin mới có quyền xem dashboard.",
       });
     }
 
@@ -103,7 +103,7 @@ const getDashboard = async (req, res) => {
     if (!year) {
       return res.status(400).json({
         success: false,
-        message: "year khong hop le.",
+        message: "year không hợp lệ.",
       });
     }
 
@@ -111,15 +111,15 @@ const getDashboard = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lay du lieu dashboard thanh cong.",
+      message: "Lấy dữ liệu dashboard thành công.",
       data: dashboard,
     });
   } catch (error) {
-    console.error("Loi lay du lieu dashboard:", error);
+    console.error("Lỗi lấy dữ liệu dashboard:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi may chu. Vui long thu lai sau.",
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
@@ -130,7 +130,7 @@ const getAccounts = async (req, res) => {
     if (req.user?.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Chi admin moi co quyen xem danh sach tai khoan.",
+        message: "Chỉ admin mới có quyền xem danh sách tài khoản.",
       });
     }
 
@@ -138,17 +138,17 @@ const getAccounts = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lay danh sach tai khoan thanh cong.",
+      message: "Lấy danh sách tài khoản thành công.",
       data: {
         users,
       },
     });
   } catch (error) {
-    console.error("Loi lay danh sach tai khoan:", error);
+    console.error("Lỗi lấy danh sách tài khoản:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi may chu. Vui long thu lai sau.",
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

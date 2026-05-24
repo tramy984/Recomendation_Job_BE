@@ -116,7 +116,7 @@ const deleteRecruiterAvatarFile = async (avatar) => {
     await fs.promises.unlink(resolvedFilePath);
   } catch (error) {
     if (error.code !== "ENOENT") {
-      console.error("Loi xoa avatar cu:", error);
+      console.error("Lỗi xóa avatar cũ:", error);
     }
   }
 };
@@ -217,21 +217,21 @@ const getRecruiterDetail = async (req, res) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Ban chua dang nhap.",
+        message: "Bạn chưa đăng nhập.",
       });
     }
 
     if (role !== "recruiter" && role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Ban khong co quyen xem thong tin nha tuyen dung.",
+        message: "Bạn không có quyền xem thông tin nhà tuyển dụng.",
       });
     }
 
     if (!isValidId(recruiterId)) {
       return res.status(400).json({
         success: false,
-        message: "recruiterId khong hop le.",
+        message: "recruiterId không hợp lệ.",
       });
     }
 
@@ -241,14 +241,14 @@ const getRecruiterDetail = async (req, res) => {
       if (!currentRecruiter) {
         return res.status(404).json({
           success: false,
-          message: "Khong tim thay thong tin nha tuyen dung.",
+          message: "Không tìm thấy thông tin nhà tuyển dụng.",
         });
       }
 
       if (Number(currentRecruiter.id) !== Number(recruiterId)) {
         return res.status(403).json({
           success: false,
-          message: "Ban khong co quyen xem thong tin nha tuyen dung nay.",
+          message: "Bạn không có quyền xem thông tin nhà tuyển dụng này.",
         });
       }
     }
@@ -258,23 +258,23 @@ const getRecruiterDetail = async (req, res) => {
     if (!recruiter) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay thong tin nha tuyen dung.",
+        message: "Không tìm thấy thông tin nhà tuyển dụng.",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Lay thong tin nha tuyen dung thanh cong.",
+      message: "Lấy thông tin nhà tuyển dụng thành công.",
       data: {
         recruiter: formatRecruiterResponse(req, recruiter),
       },
     });
   } catch (error) {
-    console.error("Loi lay thong tin nha tuyen dung:", error);
+    console.error("Lỗi lấy thông tin nhà tuyển dụng:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }
@@ -338,14 +338,14 @@ const getMyRecruiterPostingChecklist = async (req, res) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Khong tim thay thong tin nguoi dung.",
+        message: "Không tìm thấy thông tin người dùng.",
       });
     }
 
     if (role !== "recruiter") {
       return res.status(403).json({
         success: false,
-        message: "Tai khoan cua ban khong co quyen truy cap thong tin nay.",
+        message: "Tài khoản của bạn không có quyền truy cập thông tin này.",
       });
     }
 
@@ -354,13 +354,13 @@ const getMyRecruiterPostingChecklist = async (req, res) => {
     if (!checklist) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay thong tin nha tuyen dung.",
+        message: "Không tìm thấy thông tin nhà tuyển dụng.",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Lay trang thai dang bai cua nha tuyen dung thanh cong.",
+      message: "Lấy trạng thái đăng bài của nhà tuyển dụng thành công.",
       data: {
         isVerifyPhone: Boolean(checklist.is_verify_phone),
         hasCompanyInfo: Boolean(checklist.has_company_info),
@@ -370,11 +370,11 @@ const getMyRecruiterPostingChecklist = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Loi lay trang thai dang bai cua recruiter:", error);
+    console.error("Lỗi lấy trạng thái đăng bài của recruiter:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi server. Vui long thu lai sau.",
+      message: "Lỗi server. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

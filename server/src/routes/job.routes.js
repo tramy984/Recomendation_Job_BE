@@ -23,7 +23,7 @@ router.get("/types", getJobTypes);
 router.get("/job-types", getJobTypes);
 router.get("/levels", getLevels);
 router.get("/job-levels", getLevels);
-router.get("/company/me", verifyToken, getMyCompanyJobs);
+router.get("/me", verifyToken, getMyCompanyJobs);
 router.patch(
   "/applications/:applicationId/approve",
   verifyToken,

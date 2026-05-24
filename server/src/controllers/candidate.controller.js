@@ -12,6 +12,9 @@ const {
   saveJobForCandidate,
   unsaveJobForCandidate,
 } = require("../models/saved_job.model");
+const {
+  notifyJobApplicationCountIfNeeded,
+} = require("../services/notification.service");
 
 const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
@@ -50,7 +53,7 @@ const getCandidateDetail = async (req, res) => {
     if (req.user?.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Chi admin moi co quyen xem ho so ung vien.",
+        message: "Chỉ admin mới có quyền xem hồ sơ ứng viên.",
       });
     }
 
@@ -59,7 +62,7 @@ const getCandidateDetail = async (req, res) => {
     if (!isValidId(candidateId)) {
       return res.status(400).json({
         success: false,
-        message: "candidateId khong hop le.",
+        message: "candidateId không hợp lệ.",
       });
     }
 
@@ -68,7 +71,7 @@ const getCandidateDetail = async (req, res) => {
     if (!candidate) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay candidate.",
+        message: "Không tìm thấy candidate.",
       });
     }
 
@@ -80,7 +83,7 @@ const getCandidateDetail = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Loi server.",
+      message: "Lỗi server.",
     });
   }
 };
@@ -398,6 +401,10 @@ const applyMyJob = async (req, res) => {
           ? "Không tìm thấy CV của bạn."
           : "Bạn cần tải lên CV trước khi ứng tuyển.",
       });
+    }
+
+    if (result.created) {
+      await notifyJobApplicationCountIfNeeded({ jobId });
     }
 
     return res.status(result.created ? 201 : 200).json({

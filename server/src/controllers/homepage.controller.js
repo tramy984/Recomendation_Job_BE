@@ -6,15 +6,15 @@ const getStats = async (_req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lay thong ke homepage thanh cong.",
+      message: "Lấy thống kê trang chủ thành công.",
       data: stats,
     });
   } catch (error) {
-    console.error("Loi lay thong ke homepage:", error);
+    console.error("Lỗi lấy thống kê trang chủ:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi may chu. Vui long thu lai sau.",
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

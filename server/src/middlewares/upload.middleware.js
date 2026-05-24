@@ -316,13 +316,13 @@ const uploadPendingCompanyCertificate = (req, res, next) => {
       ) {
         return res.status(400).json({
           success: false,
-          message: "File giay chung nhan khong duoc vuot qua 5MB.",
+          message: "File giấy chứng nhận không được vượt quá 5MB.",
         });
       }
 
       return res.status(400).json({
         success: false,
-        message: error.message || "Tai file giay chung nhan that bai.",
+        message: error.message || "Tải file giấy chứng nhận thất bại.",
       });
     },
   );
@@ -339,13 +339,13 @@ const uploadPendingCompanyLogo = (req, res, next) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "File logo khong duoc vuot qua 5MB.",
+        message: "File logo không được vượt quá 5MB.",
       });
     }
 
     return res.status(400).json({
       success: false,
-      message: error.message || "Tai file logo that bai.",
+      message: error.message || "Tải file logo thất bại.",
     });
   });
 };
@@ -364,13 +364,13 @@ const uploadPendingCompanyFiles = (req, res, next) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "File tai len khong duoc vuot qua 5MB.",
+        message: "File tải lên không được vượt quá 5MB.",
       });
     }
 
     return res.status(400).json({
       success: false,
-      message: error.message || "Tai file that bai.",
+      message: error.message || "Tải file thất bại.",
     });
   });
 };
