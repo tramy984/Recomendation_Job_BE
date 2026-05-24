@@ -142,9 +142,10 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
         candidate_id,
         cv_id,
         job_id,
-        status
+        status,
+        created_at
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
       RETURNING id
       `,
       [candidateId, cv.id, jobId, "pending"],

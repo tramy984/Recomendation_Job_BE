@@ -877,7 +877,7 @@ const getMyCompanyJobs = async (req, res) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Ban chua dang nhap.",
+        message: "Bạn chưa đăng nhập.",
       });
     }
 
@@ -885,7 +885,7 @@ const getMyCompanyJobs = async (req, res) => {
       return res.status(403).json({
         success: false,
         message:
-          "Chi nha tuyen dung moi co quyen xem tin tuyen dung cua cong ty.",
+          "Chỉ nhà tuyển dụng mới có quyền xem tin tuyển dụng của công ty.",
       });
     }
 
@@ -894,14 +894,7 @@ const getMyCompanyJobs = async (req, res) => {
     if (!recruiter) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay thong tin nha tuyen dung.",
-      });
-    }
-
-    if (!recruiter.company_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Nha tuyen dung chua lien ket cong ty.",
+        message: "Không tìm thấy thông tin nhà tuyển dụng.",
       });
     }
 
@@ -918,7 +911,7 @@ const getMyCompanyJobs = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lay danh sach tin tuyen dung cua cong ty thanh cong.",
+      message: "Lấy danh sách tin tuyển dụng của công ty thành công.",
       data: {
         recruiterId: recruiter.id,
         companyId: recruiter.company_id,
@@ -927,11 +920,11 @@ const getMyCompanyJobs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Loi lay danh sach tin tuyen dung cua cong ty:", error);
+    console.error(" Lỗi lấy danh sách tin tuyển dụng của công ty:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Loi may chu. Vui long thu lai sau.",
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
       error: error.message,
     });
   }

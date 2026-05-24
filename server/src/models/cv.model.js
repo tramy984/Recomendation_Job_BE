@@ -85,9 +85,10 @@ const createCV = async ({ candidateId, fileUrl, isDefault }) => {
       INSERT INTO cvs (
         candidate_id,
         file_url,
+        created_at,
         is_default
       )
-      VALUES ($1, $2, $3)
+      VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
       RETURNING
         id,
         candidate_id,

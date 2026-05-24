@@ -156,8 +156,8 @@ const createUser = async ({ fullName, email, passwordHash, role }) => {
     await client.query("BEGIN");
 
     const userResult = await client.query(
-      `INSERT INTO users (email, password, role)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (email, password, role, created_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
        RETURNING id, email, role, status, created_at`,
       [email, passwordHash, role]
     );
