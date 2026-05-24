@@ -82,6 +82,17 @@ CREATE TABLE phone_verification_codes (
 );
 CREATE INDEX idx_phone_verification_active
     ON phone_verification_codes(user_id, phone, consumed_at, created_at);
+CREATE TABLE email_verification_codes (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    consumed_at TIMESTAMP,
+    attempts INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_email_verification_active
+    ON email_verification_codes(email, consumed_at, created_at);
 CREATE TABLE pending_companies (
     id BIGSERIAL,
     recruiter_id BIGINT NOT NULL,

@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 
 const {
   findUserByEmail,
@@ -21,9 +22,28 @@ const {
   consumePhoneVerificationCode,
 } = require("../models/phone_verification.model");
 
+const {
+  createEmailVerificationCode,
+  getActiveEmailVerificationCode,
+  increaseEmailVerificationAttempts,
+  consumeEmailVerificationCode,
+} = require("../models/email_verification.model");
+
 const ALLOWED_ROLES = ["candidate", "recruiter"];
 const OTP_EXPIRES_IN_MINUTES = 5;
 const OTP_MAX_ATTEMPTS = 5;
+
+const normalizeEmail = (email) => {
+  if (typeof email !== "string") return null;
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return null;
+  }
+
+  return normalizedEmail;
+};
 
 const normalizePhoneNumber = (phone) => {
   if (typeof phone !== "string") return null;
@@ -56,6 +76,59 @@ const sendPhoneOtp = async ({ phone, otp }) => {
   console.log("Mã OTP:", otp);
   console.log("Hiệu lực:", OTP_EXPIRES_IN_MINUTES, "phút");
   console.log("======================================");
+
+  return true;
+};
+
+const getMailTransporter = () => {
+  if (
+    !process.env.SMTP_HOST ||
+    !process.env.SMTP_PORT ||
+    !process.env.SMTP_USER ||
+    !process.env.SMTP_PASS
+  ) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+};
+
+const sendEmailOtp = async ({ email, otp }) => {
+  console.log("======================================");
+  console.log("OTP XAC THUC EMAIL");
+  console.log("Email:", email);
+  console.log("Ma OTP:", otp);
+  console.log("Hieu luc:", OTP_EXPIRES_IN_MINUTES, "phut");
+  console.log("======================================");
+
+  const transporter = getMailTransporter();
+
+  if (!transporter) {
+    console.log(
+      "SMTP chua duoc cau hinh, bo qua buoc gui email that. Hay xem OTP o terminal."
+    );
+    return false;
+  }
+
+  await transporter.sendMail({
+    from: process.env.MAIL_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: "Ma OTP xac thuc email",
+    text: `Ma OTP cua ban la ${otp}. Ma co hieu luc trong ${OTP_EXPIRES_IN_MINUTES} phut.`,
+    html: `
+      <p>Ma OTP cua ban la:</p>
+      <h2>${otp}</h2>
+      <p>Ma co hieu luc trong ${OTP_EXPIRES_IN_MINUTES} phut.</p>
+    `,
+  });
 
   return true;
 };
@@ -213,6 +286,40 @@ const login = async (req, res) => {
   }
 };
 
+const checkEmailRegistered = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email khong hop le.",
+      });
+    }
+
+    const user = await findUserByEmail(email);
+
+    return res.status(200).json({
+      success: true,
+      message: user
+        ? "Email da duoc dang ky tai khoan."
+        : "Email chua duoc dang ky tai khoan.",
+      data: {
+        email,
+        isRegistered: Boolean(user),
+      },
+    });
+  } catch (error) {
+    console.error("Loi kiem tra email dang ky:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
 const changePassword = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -290,6 +397,122 @@ const changePassword = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi server. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
+const requestEmailOtp = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email khong hop le.",
+      });
+    }
+
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(
+      Date.now() + OTP_EXPIRES_IN_MINUTES * 60 * 1000
+    );
+
+    await createEmailVerificationCode({
+      email,
+      otpHash,
+      expiresAt,
+    });
+
+    const emailSent = await sendEmailOtp({ email, otp });
+
+    return res.status(200).json({
+      success: true,
+      message: emailSent
+        ? "Da gui ma OTP den email. Vui long xem them OTP trong terminal backend de test."
+        : "Da tao ma OTP. SMTP chua cau hinh nen hay xem OTP trong terminal backend.",
+      data: {
+        email,
+        emailSent,
+        expiresInMinutes: OTP_EXPIRES_IN_MINUTES,
+      },
+    });
+  } catch (error) {
+    console.error("Loi gui OTP xac thuc email:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
+};
+
+const verifyEmailOtp = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const otp = typeof req.body?.otp === "string" ? req.body.otp.trim() : "";
+
+    if (!email || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "Email hoac ma OTP khong hop le.",
+      });
+    }
+
+    const verificationCode = await getActiveEmailVerificationCode(email);
+
+    if (!verificationCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Ma OTP khong ton tai hoac da het han.",
+      });
+    }
+
+    if (verificationCode.attempts >= OTP_MAX_ATTEMPTS) {
+      await consumeEmailVerificationCode(verificationCode.id);
+
+      return res.status(429).json({
+        success: false,
+        message: "Ban da nhap sai OTP qua nhieu lan. Hay gui lai ma moi.",
+      });
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, verificationCode.otp_hash);
+
+    if (!isOtpValid) {
+      const updatedCode = await increaseEmailVerificationAttempts(
+        verificationCode.id
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: "Ma OTP khong dung.",
+        data: {
+          remainingAttempts: Math.max(
+            OTP_MAX_ATTEMPTS - (updatedCode?.attempts || 0),
+            0
+          ),
+        },
+      });
+    }
+
+    await consumeEmailVerificationCode(verificationCode.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Xac thuc email thanh cong.",
+      data: {
+        email,
+      },
+    });
+  } catch (error) {
+    console.error("Loi xac thuc OTP email:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server. Vui long thu lai sau.",
       error: error.message,
     });
   }
@@ -472,6 +695,9 @@ module.exports = {
   changePassword,
   register,
   login,
+  checkEmailRegistered,
+  requestEmailOtp,
+  verifyEmailOtp,
   requestPhoneOtp,
   verifyPhoneOtp,
 };
