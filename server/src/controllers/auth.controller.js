@@ -240,7 +240,7 @@ const login = async (req, res) => {
     if (user.status === false) {
       return res.status(403).json({
         success: false,
-        message: "Tài khoản của bạn đã bị khóa.",
+        message: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ admin@gmail.com để được hỗ trợ",
       });
     }
 

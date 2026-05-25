@@ -3,6 +3,7 @@ const pool = require("../config/db");
 const RECRUITER_FIELDS = `
   SELECT
     r.*,
+    u.email,
     CASE
       WHEN c.company_id IS NULL THEN NULL
       ELSE jsonb_build_object(
@@ -53,6 +54,7 @@ const getRecruiterByUserId = async (userId) => {
     `
     ${RECRUITER_FIELDS}
     FROM recruiter r
+    LEFT JOIN users u ON u.id = r.user_id
     LEFT JOIN company c ON c.company_id = r.company_id
     WHERE r.user_id = $1
     `,
@@ -69,6 +71,7 @@ const getRecruiterById = async (recruiterId) => {
     `
     ${RECRUITER_FIELDS}
     FROM recruiter r
+    LEFT JOIN users u ON u.id = r.user_id
     LEFT JOIN company c ON c.company_id = r.company_id
     WHERE r.id = $1
     `,
