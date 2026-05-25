@@ -159,6 +159,8 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
         job_id,
         status,
         created_at
+        status,
+        created_at
       )
       VALUES ($1, $2, $3, $4, NOW())
       RETURNING id

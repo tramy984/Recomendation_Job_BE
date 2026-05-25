@@ -928,7 +928,7 @@ const getMyCompanyJobs = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lấy danh sách tin tuyển dụng của nhà tuyển dụng thành công.",
+      message: "Lay danh sach tin tuyen dung cua cong ty thanh cong.",
       data: {
         recruiterId: recruiter.id,
         companyId: recruiter.company_id,
@@ -937,7 +937,7 @@ const getMyCompanyJobs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Lỗi lấy danh sách tin tuyển dụng của công ty:", error);
+    console.error("Loi lay danh sach tin tuyen dung cua cong ty:", error);
 
     return res.status(500).json({
       success: false,

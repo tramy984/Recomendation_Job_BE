@@ -485,6 +485,7 @@ const createJob = async ({
         salary_min,
         salary_max,
         status,
+        created_at,
         expire,
         location,
         id_level,
@@ -496,8 +497,8 @@ const createJob = async ({
         job_requirement
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP,
+        $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       RETURNING *
       `,

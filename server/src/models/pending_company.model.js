@@ -254,9 +254,10 @@ const createPendingCompany = async ({
         url_facebook,
         logo,
         certificate,
-        request_type
+        request_type,
+        created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
       RETURNING *
       `,
       [
