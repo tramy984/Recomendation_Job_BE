@@ -110,6 +110,35 @@ const getRecruiterPostingChecklistByUserId = async (userId) => {
 const updateRecruiterById = async (id, updateData = {}) => {
   if (!id) return null;
 
+  const hasPhoneUpdate = Object.prototype.hasOwnProperty.call(
+    updateData,
+    "phone"
+  );
+  const hasVerifyPhoneUpdate =
+    Object.prototype.hasOwnProperty.call(updateData, "isVerifyPhone") ||
+    Object.prototype.hasOwnProperty.call(updateData, "is_verify_phone");
+
+  if (hasPhoneUpdate && !hasVerifyPhoneUpdate) {
+    const currentResult = await pool.query(
+      `
+      SELECT phone
+      FROM recruiter
+      WHERE id = $1
+      `,
+      [id]
+    );
+
+    const currentPhone = currentResult.rows[0]?.phone ?? null;
+    const nextPhone = updateData.phone ?? null;
+
+    if (nextPhone !== currentPhone) {
+      updateData = {
+        ...updateData,
+        isVerifyPhone: false,
+      };
+    }
+  }
+
   const fields = [
     { keys: ["fullName", "full_name"], column: "full_name" },
     { keys: ["phone"], column: "phone" },

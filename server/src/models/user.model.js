@@ -6,6 +6,19 @@ const {
   createRecruiterProfile,
 } = require("./recruiter.model");
 
+let tableReadyPromise = null;
+
+const ensureUserTableDefaults = () => {
+  if (!tableReadyPromise) {
+    tableReadyPromise = pool.query(`
+      ALTER TABLE users
+        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+    `);
+  }
+
+  return tableReadyPromise;
+};
+
 const findUserByEmail = async (email) => {
   const result = await pool.query(
     "SELECT * FROM users WHERE email = $1",
@@ -150,14 +163,16 @@ const updateUserStatusById = async (userId, status) => {
 };
 
 const createUser = async ({ fullName, email, passwordHash, role }) => {
+  await ensureUserTableDefaults();
+
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
     const userResult = await client.query(
-      `INSERT INTO users (email, password, role)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (email, password, role, created_at)
+       VALUES ($1, $2, $3, NOW())
        RETURNING id, email, role, status, created_at`,
       [email, passwordHash, role]
     );
