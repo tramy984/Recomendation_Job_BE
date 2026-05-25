@@ -153,18 +153,16 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
 
     const applicationResult = await client.query(
       `
-      INSERT INTO applications (
-        candidate_id,
-        cv_id,
-        job_id,
-        status,
-        created_at
-        status,
-        created_at
-      )
-      VALUES ($1, $2, $3, $4, NOW())
-      RETURNING id
-      `,
+  INSERT INTO applications (
+    candidate_id,
+    cv_id,
+    job_id,
+    status,
+    created_at
+  )
+  VALUES ($1, $2, $3, $4, NOW())
+  RETURNING id
+  `,
       [candidateId, cv.id, jobId, "pending"],
     );
 

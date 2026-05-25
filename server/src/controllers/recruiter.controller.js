@@ -3,6 +3,7 @@ const path = require("path");
 
 const {
   getRecruiterById,
+  getRecruiterDashboardStatistics,
   getRecruiterByUserId,
   getRecruiterPostingChecklistByUserId,
   updateRecruiterById,
@@ -206,6 +207,110 @@ const normalizeOptionalFields = (updateData) => {
 
 const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
+};
+
+const parseStatisticsFilters = (query = {}) => {
+  const filters = {};
+
+  if (query.year !== undefined && query.year !== "") {
+    if (!/^\d{4}$/.test(String(query.year))) {
+      return {
+        error: "Nam thong ke khong hop le.",
+      };
+    }
+
+    filters.year = Number(query.year);
+  }
+
+  if (query.month !== undefined && query.month !== "") {
+    if (!/^\d{1,2}$/.test(String(query.month))) {
+      return {
+        error: "Thang thong ke khong hop le.",
+      };
+    }
+
+    filters.month = Number(query.month);
+
+    if (filters.month < 1 || filters.month > 12) {
+      return {
+        error: "Thang thong ke phai tu 1 den 12.",
+      };
+    }
+
+    if (!filters.year) {
+      return {
+        error: "Thang thong ke can di kem nam thong ke.",
+      };
+    }
+  }
+
+  return {
+    filters,
+  };
+};
+
+const getMyRecruiterStatistics = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Ban chua dang nhap.",
+      });
+    }
+
+    if (role !== "recruiter") {
+      return res.status(403).json({
+        success: false,
+        message: "Chi nha tuyen dung moi co quyen xem thong ke nay.",
+      });
+    }
+
+    const { filters, error } = parseStatisticsFilters(req.query);
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error,
+      });
+    }
+
+    const recruiter = await getRecruiterByUserId(userId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay thong tin nha tuyen dung.",
+      });
+    }
+
+    const statistics = await getRecruiterDashboardStatistics(
+      recruiter.id,
+      filters
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Lay thong ke nha tuyen dung thanh cong.",
+      data: {
+        recruiterId: recruiter.id,
+        companyId: recruiter.company_id,
+        filters,
+        ...statistics,
+        passedCvStatus: "approved",
+      },
+    });
+  } catch (error) {
+    console.error("Loi lay thong ke nha tuyen dung:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Loi server. Vui long thu lai sau.",
+      error: error.message,
+    });
+  }
 };
 
 const getRecruiterDetail = async (req, res) => {
@@ -532,6 +637,7 @@ const updateMyRecruiterProfile = async (req, res) => {
 
 module.exports = {
   getRecruiterDetail,
+  getMyRecruiterStatistics,
   getMyRecruiterProfile,
   getMyRecruiterPostingChecklist,
   updateMyRecruiterProfile,
