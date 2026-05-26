@@ -69,6 +69,7 @@ const getJobById = async (jobId, client = pool) => {
         ELSE jsonb_build_object(
           'id', r.id,
           'full_name', r.full_name,
+          'email', u.email,
           'phone', r.phone,
           'avatar', r.avatar,
           'is_verify_phone', COALESCE(r.is_verify_phone, FALSE)
@@ -93,6 +94,7 @@ const getJobById = async (jobId, client = pool) => {
     LEFT JOIN job_type jt ON jt.id = j.job_type_id
     LEFT JOIN company c ON c.company_id = j.company_id
     LEFT JOIN recruiter r ON r.id = j.recruiter_id
+    LEFT JOIN users u ON u.id = r.user_id
     WHERE j.id = $1
     `,
     [jobId],
