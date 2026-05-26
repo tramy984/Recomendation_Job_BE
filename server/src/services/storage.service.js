@@ -62,6 +62,11 @@ const uploadFileToStorage = async ({ file, folder }) => {
   const signature = buildSignature(uploadParams, config.apiSecret);
   const fileBuffer = fs.readFileSync(file.path);
   const formData = new FormData();
+  const resourceType =
+    file.mimetype === "application/pdf" ||
+    String(file.originalname || file.filename).toLowerCase().endsWith(".pdf")
+      ? "raw"
+      : "auto";
 
   formData.append(
     "file",
@@ -76,7 +81,7 @@ const uploadFileToStorage = async ({ file, folder }) => {
   formData.append("signature", signature);
 
   const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${config.cloudName}/auto/upload`,
+    `https://api.cloudinary.com/v1_1/${config.cloudName}/${resourceType}/upload`,
     {
       method: "POST",
       body: formData,
