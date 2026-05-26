@@ -22,6 +22,23 @@ const { getRecruiterByUserId } = require("../models/recruiter.model");
 const {
   notifyPendingCompanyReviewed,
 } = require("../services/notification.service");
+const {
+  isCloudStorageConfigured,
+  uploadFileToStorage,
+} = require("../services/storage.service");
+
+const removeLocalUploadedFile = async (file) => {
+  if (!file?.path) return;
+
+  try {
+    const fs = require("fs");
+    await fs.promises.unlink(file.path);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("DELETE LOCAL UPLOAD ERROR:", error);
+    }
+  }
+};
 
 const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
@@ -67,14 +84,36 @@ const normalizeOptionalText = (value) => {
   return trimmedValue || null;
 };
 
-const getPendingCompanyCertificateUrl = (file) => {
+const getPendingCompanyCertificateUrl = async (file) => {
   if (!file) return null;
+
+  if (isCloudStorageConfigured()) {
+    const fileUrl = await uploadFileToStorage({
+      file,
+      folder: "pending-company-certificates",
+    });
+
+    await removeLocalUploadedFile(file);
+
+    return fileUrl;
+  }
 
   return `/uploads/pending-companies/certificates/${file.filename}`;
 };
 
-const getPendingCompanyLogoUrl = (file) => {
+const getPendingCompanyLogoUrl = async (file) => {
   if (!file) return null;
+
+  if (isCloudStorageConfigured()) {
+    const fileUrl = await uploadFileToStorage({
+      file,
+      folder: "pending-company-logos",
+    });
+
+    await removeLocalUploadedFile(file);
+
+    return fileUrl;
+  }
 
   return `/uploads/pending-companies/logos/${file.filename}`;
 };
@@ -561,10 +600,10 @@ const updatePendingCompanyRequest = async (req, res) => {
 
     const payload = getPendingCompanyPayload(req.body);
     const updateData = {};
-    const uploadedLogo = getPendingCompanyLogoUrl(
+    const uploadedLogo = await getPendingCompanyLogoUrl(
       getUploadedFile(req, "logo")
     );
-    const uploadedCertificate = getPendingCompanyCertificateUrl(
+    const uploadedCertificate = await getPendingCompanyCertificateUrl(
       getUploadedFile(req, "certificate")
     );
 
@@ -728,7 +767,7 @@ const updatePendingCompanyCertificate = async (req, res) => {
       });
     }
 
-    const uploadedCertificate = getPendingCompanyCertificateUrl(
+    const uploadedCertificate = await getPendingCompanyCertificateUrl(
       getUploadedFile(req, "certificate")
     );
     const payload = getPendingCompanyPayload(req.body);
@@ -816,10 +855,10 @@ const createPendingCompanyRequest = async (req, res) => {
     }
 
     const payload = getPendingCompanyPayload(req.body);
-    const uploadedLogo = getPendingCompanyLogoUrl(
+    const uploadedLogo = await getPendingCompanyLogoUrl(
       getUploadedFile(req, "logo")
     );
-    const uploadedCertificate = getPendingCompanyCertificateUrl(
+    const uploadedCertificate = await getPendingCompanyCertificateUrl(
       getUploadedFile(req, "certificate")
     );
 
@@ -1065,8 +1104,8 @@ const updateCompanyRequest = async (req, res) => {
 
     const payload = getPendingCompanyPayload(req.body);
 
-    const uploadedLogo = getPendingCompanyLogoUrl(getUploadedFile(req, "logo"));
-    const uploadedCertificate = getPendingCompanyCertificateUrl(
+    const uploadedLogo = await getPendingCompanyLogoUrl(getUploadedFile(req, "logo"));
+    const uploadedCertificate = await getPendingCompanyCertificateUrl(
       getUploadedFile(req, "certificate")
     );
 

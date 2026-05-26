@@ -8,11 +8,41 @@ const {
   getRecruiterPostingChecklistByUserId,
   updateRecruiterById,
 } = require("../models/recruiter.model");
+const {
+  deleteFileFromStorage,
+  isCloudStorageConfigured,
+  uploadFileToStorage,
+} = require("../services/storage.service");
 
 const recruiterUploadDir = path.join(__dirname, "../../uploads/recruiters");
 
-const getUploadedFileUrl = (req, file) => {
-  return `/uploads/recruiters/${file.filename}`;
+const removeLocalUploadedFile = async (file) => {
+  if (!file?.path) return;
+
+  try {
+    await fs.promises.unlink(file.path);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("DELETE LOCAL UPLOAD ERROR:", error);
+    }
+  }
+};
+
+const saveRecruiterAvatarFile = async (file, recruiterId) => {
+  if (!file) return null;
+
+  if (!isCloudStorageConfigured()) {
+    return `/uploads/recruiters/${file.filename}`;
+  }
+
+  const fileUrl = await uploadFileToStorage({
+    file,
+    folder: `recruiter-avatars/${recruiterId}`,
+  });
+
+  await removeLocalUploadedFile(file);
+
+  return fileUrl;
 };
 
 const getPublicAvatarUrl = (req, avatar) => {
@@ -102,6 +132,8 @@ const getUploadPathFromAvatar = (avatar) => {
 };
 
 const deleteRecruiterAvatarFile = async (avatar) => {
+  if (await deleteFileFromStorage(avatar)) return;
+
   const uploadPath = getUploadPathFromAvatar(avatar);
 
   if (!uploadPath) return;
@@ -486,6 +518,8 @@ const getMyRecruiterPostingChecklist = async (req, res) => {
 };
 
 const updateMyRecruiterProfile = async (req, res) => {
+  let uploadedAvatar = null;
+
   try {
     const userId = req.user?.id;
     const role = req.user?.role;
@@ -527,7 +561,8 @@ const updateMyRecruiterProfile = async (req, res) => {
       updateData.avatar === "";
 
     if (req.file) {
-      updateData.avatar = getUploadedFileUrl(req, req.file);
+      uploadedAvatar = await saveRecruiterAvatarFile(req.file, recruiter.id);
+      updateData.avatar = uploadedAvatar;
     }
 
     if (
@@ -549,8 +584,8 @@ const updateMyRecruiterProfile = async (req, res) => {
         const normalizedPhone = normalizePhoneNumber(updateData.phone);
 
         if (!normalizedPhone) {
-          if (req.file) {
-            await deleteRecruiterAvatarFile(getUploadedFileUrl(req, req.file));
+          if (uploadedAvatar) {
+            await deleteRecruiterAvatarFile(uploadedAvatar);
           }
 
           return res.status(400).json({
@@ -568,8 +603,8 @@ const updateMyRecruiterProfile = async (req, res) => {
     }
 
     if (!hasUpdatableRecruiterField(updateData)) {
-      if (req.file) {
-        await deleteRecruiterAvatarFile(getUploadedFileUrl(req, req.file));
+      if (uploadedAvatar) {
+        await deleteRecruiterAvatarFile(uploadedAvatar);
       }
 
       return res.status(400).json({
@@ -587,8 +622,8 @@ const updateMyRecruiterProfile = async (req, res) => {
       const trimmedName = nextName.trim();
 
       if (trimmedName.length < 3) {
-        if (req.file) {
-          await deleteRecruiterAvatarFile(getUploadedFileUrl(req, req.file));
+        if (uploadedAvatar) {
+          await deleteRecruiterAvatarFile(uploadedAvatar);
         }
 
         return res.status(400).json({
@@ -621,8 +656,10 @@ const updateMyRecruiterProfile = async (req, res) => {
       },
     });
   } catch (error) {
-    if (req.file) {
-      await deleteRecruiterAvatarFile(getUploadedFileUrl(req, req.file));
+    if (uploadedAvatar) {
+      await deleteRecruiterAvatarFile(uploadedAvatar);
+    } else if (req.file) {
+      await removeLocalUploadedFile(req.file);
     }
 
     console.error("Lỗi cập nhật recruiter:", error);

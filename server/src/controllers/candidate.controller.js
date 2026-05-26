@@ -15,6 +15,24 @@ const {
 const {
   notifyJobApplicationCountIfNeeded,
 } = require("../services/notification.service");
+const {
+  deleteFileFromStorage,
+  isCloudStorageConfigured,
+  uploadFileToStorage,
+} = require("../services/storage.service");
+
+const removeLocalUploadedFile = async (file) => {
+  if (!file?.path) return;
+
+  try {
+    const fs = require("fs");
+    await fs.promises.unlink(file.path);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("DELETE LOCAL UPLOAD ERROR:", error);
+    }
+  }
+};
 
 const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
@@ -27,6 +45,10 @@ const getMyCandidate = async (req, res) => {
     const candidate = await findCandidateByUserId(userId);
 
     if (!candidate) {
+      if (avatar) {
+        await deleteFileFromStorage(avatar);
+      }
+
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy candidate.",
@@ -99,7 +121,17 @@ const updateMyCandidate = async (req, res) => {
     let updateAvatar = false;
 
     if (req.file) {
-      avatar = `/uploads/candidates/${req.file.filename}`;
+      avatar = isCloudStorageConfigured()
+        ? await uploadFileToStorage({
+            file: req.file,
+            folder: `candidate-avatars/${userId}`,
+          })
+        : `/uploads/candidates/${req.file.filename}`;
+
+      if (isCloudStorageConfigured()) {
+        await removeLocalUploadedFile(req.file);
+      }
+
       updateAvatar = true;
     }
 
@@ -132,6 +164,10 @@ const updateMyCandidate = async (req, res) => {
       data: candidate,
     });
   } catch (error) {
+    if (req.file) {
+      await removeLocalUploadedFile(req.file);
+    }
+
     console.log("UPDATE MY CANDIDATE ERROR:", error);
 
     return res.status(500).json({

@@ -8,7 +8,7 @@ const getSupabaseConfig = () => {
   const url = trimTrailingSlash(process.env.SUPABASE_URL);
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_STORAGE_KEY;
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "cvs";
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "uploads";
 
   if (!url || !key || !bucket) {
     return null;
@@ -29,7 +29,7 @@ const isCloudStorageConfigured = () => {
   return Boolean(getSupabaseConfig());
 };
 
-const uploadCVToStorage = async ({ file, candidateId }) => {
+const uploadFileToStorage = async ({ file, folder }) => {
   const config = getSupabaseConfig();
 
   if (!config) return null;
@@ -38,7 +38,9 @@ const uploadCVToStorage = async ({ file, candidateId }) => {
     throw new Error("Node fetch API is not available for Supabase upload.");
   }
 
-  const objectPath = `candidates/${candidateId}/${file.filename}`;
+  const objectPath = `${String(folder || "files").replace(/^\/+|\/+$/g, "")}/${
+    file.filename
+  }`;
   const uploadUrl = `${config.url}/storage/v1/object/${config.bucket}/${encodeStoragePath(
     objectPath,
   )}`;
@@ -67,7 +69,7 @@ const uploadCVToStorage = async ({ file, candidateId }) => {
   )}`;
 };
 
-const deleteCVFromStorage = async (fileUrl) => {
+const deleteFileFromStorage = async (fileUrl) => {
   const config = getSupabaseConfig();
 
   if (!config || !fileUrl || typeof fetch !== "function") return false;
@@ -93,7 +95,10 @@ const deleteCVFromStorage = async (fileUrl) => {
 };
 
 module.exports = {
-  deleteCVFromStorage,
+  deleteCVFromStorage: deleteFileFromStorage,
+  deleteFileFromStorage,
   isCloudStorageConfigured,
-  uploadCVToStorage,
+  uploadCVToStorage: ({ file, candidateId }) =>
+    uploadFileToStorage({ file, folder: `cvs/candidates/${candidateId}` }),
+  uploadFileToStorage,
 };
