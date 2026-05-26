@@ -23,7 +23,6 @@ const {
   notifyPendingCompanyReviewed,
 } = require("../services/notification.service");
 const {
-  isCloudStorageConfigured,
   uploadFileToStorage,
 } = require("../services/storage.service");
 
@@ -87,35 +86,27 @@ const normalizeOptionalText = (value) => {
 const getPendingCompanyCertificateUrl = async (file) => {
   if (!file) return null;
 
-  if (isCloudStorageConfigured()) {
-    const fileUrl = await uploadFileToStorage({
-      file,
-      folder: "pending-company-certificates",
-    });
+  const fileUrl = await uploadFileToStorage({
+    file,
+    folder: "pending-company-certificates",
+  });
 
-    await removeLocalUploadedFile(file);
+  await removeLocalUploadedFile(file);
 
-    return fileUrl;
-  }
-
-  return `/uploads/pending-companies/certificates/${file.filename}`;
+  return fileUrl;
 };
 
 const getPendingCompanyLogoUrl = async (file) => {
   if (!file) return null;
 
-  if (isCloudStorageConfigured()) {
-    const fileUrl = await uploadFileToStorage({
-      file,
-      folder: "pending-company-logos",
-    });
+  const fileUrl = await uploadFileToStorage({
+    file,
+    folder: "pending-company-logos",
+  });
 
-    await removeLocalUploadedFile(file);
+  await removeLocalUploadedFile(file);
 
-    return fileUrl;
-  }
-
-  return `/uploads/pending-companies/logos/${file.filename}`;
+  return fileUrl;
 };
 
 const getUploadedFile = (req, fieldName) => {

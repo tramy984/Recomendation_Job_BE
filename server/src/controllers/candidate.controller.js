@@ -17,7 +17,6 @@ const {
 } = require("../services/notification.service");
 const {
   deleteFileFromStorage,
-  isCloudStorageConfigured,
   uploadFileToStorage,
 } = require("../services/storage.service");
 
@@ -121,16 +120,12 @@ const updateMyCandidate = async (req, res) => {
     let updateAvatar = false;
 
     if (req.file) {
-      avatar = isCloudStorageConfigured()
-        ? await uploadFileToStorage({
-            file: req.file,
-            folder: `candidate-avatars/${userId}`,
-          })
-        : `/uploads/candidates/${req.file.filename}`;
+      avatar = await uploadFileToStorage({
+        file: req.file,
+        folder: `candidate-avatars/${userId}`,
+      });
 
-      if (isCloudStorageConfigured()) {
-        await removeLocalUploadedFile(req.file);
-      }
+      await removeLocalUploadedFile(req.file);
 
       updateAvatar = true;
     }

@@ -11,7 +11,6 @@ const {
 } = require("../models/cv.model");
 const {
   deleteCVFromStorage,
-  isCloudStorageConfigured,
   uploadCVToStorage,
 } = require("../services/storage.service");
 
@@ -116,12 +115,10 @@ const uploadMyCV = async (req, res) => {
       });
     }
 
-    const fileUrl = isCloudStorageConfigured()
-      ? await uploadCVToStorage({
-          file: req.file,
-          candidateId,
-        })
-      : `/uploads/cvs/${req.file.filename}`;
+    const fileUrl = await uploadCVToStorage({
+      file: req.file,
+      candidateId,
+    });
 
     const cv = await createCV({
       candidateId,
@@ -129,9 +126,7 @@ const uploadMyCV = async (req, res) => {
       isDefault: totalCV === 0,
     });
 
-    if (isCloudStorageConfigured()) {
-      removeOldFile(`/uploads/cvs/${req.file.filename}`);
-    }
+    removeOldFile(`/uploads/cvs/${req.file.filename}`);
 
     return res.status(201).json({
       success: true,

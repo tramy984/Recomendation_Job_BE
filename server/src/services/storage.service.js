@@ -43,7 +43,9 @@ const isCloudStorageConfigured = () => {
 const uploadFileToStorage = async ({ file, folder }) => {
   const config = getCloudinaryConfig();
 
-  if (!config) return null;
+  if (!config) {
+    throw new Error("Cloudinary storage is not configured.");
+  }
 
   if (typeof fetch !== "function" || typeof FormData !== "function") {
     throw new Error("Node fetch/FormData API is not available for Cloudinary upload.");

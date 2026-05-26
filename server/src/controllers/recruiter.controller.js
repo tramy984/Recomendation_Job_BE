@@ -10,7 +10,6 @@ const {
 } = require("../models/recruiter.model");
 const {
   deleteFileFromStorage,
-  isCloudStorageConfigured,
   uploadFileToStorage,
 } = require("../services/storage.service");
 
@@ -30,10 +29,6 @@ const removeLocalUploadedFile = async (file) => {
 
 const saveRecruiterAvatarFile = async (file, recruiterId) => {
   if (!file) return null;
-
-  if (!isCloudStorageConfigured()) {
-    return `/uploads/recruiters/${file.filename}`;
-  }
 
   const fileUrl = await uploadFileToStorage({
     file,
