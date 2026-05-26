@@ -1,97 +1,172 @@
+const crypto = require("crypto");
 const fs = require("fs");
 
-const trimTrailingSlash = (value) => {
-  return String(value || "").replace(/\/+$/, "");
-};
+const getCloudinaryConfig = () => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const rootFolder = process.env.CLOUDINARY_UPLOAD_FOLDER || "recommendation-job";
 
-const getSupabaseConfig = () => {
-  const url = trimTrailingSlash(process.env.SUPABASE_URL);
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_STORAGE_KEY;
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "uploads";
-
-  if (!url || !key || !bucket) {
+  if (!cloudName || !apiKey || !apiSecret) {
     return null;
   }
 
   return {
-    url,
-    key,
-    bucket,
+    apiKey,
+    apiSecret,
+    cloudName,
+    rootFolder,
   };
 };
 
-const encodeStoragePath = (storagePath) => {
-  return storagePath.split("/").map(encodeURIComponent).join("/");
+const normalizeFolder = (folder) => {
+  return String(folder || "files").replace(/^\/+|\/+$/g, "");
+};
+
+const buildSignature = (params, apiSecret) => {
+  const payload = Object.keys(params)
+    .filter((key) => params[key] !== undefined && params[key] !== null)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+
+  return crypto
+    .createHash("sha1")
+    .update(`${payload}${apiSecret}`)
+    .digest("hex");
 };
 
 const isCloudStorageConfigured = () => {
-  return Boolean(getSupabaseConfig());
+  return Boolean(getCloudinaryConfig());
 };
 
 const uploadFileToStorage = async ({ file, folder }) => {
-  const config = getSupabaseConfig();
+  const config = getCloudinaryConfig();
 
   if (!config) return null;
 
-  if (typeof fetch !== "function") {
-    throw new Error("Node fetch API is not available for Supabase upload.");
+  if (typeof fetch !== "function" || typeof FormData !== "function") {
+    throw new Error("Node fetch/FormData API is not available for Cloudinary upload.");
   }
 
-  const objectPath = `${String(folder || "files").replace(/^\/+|\/+$/g, "")}/${
-    file.filename
-  }`;
-  const uploadUrl = `${config.url}/storage/v1/object/${config.bucket}/${encodeStoragePath(
-    objectPath,
+  const timestamp = Math.floor(Date.now() / 1000);
+  const targetFolder = `${normalizeFolder(config.rootFolder)}/${normalizeFolder(
+    folder,
   )}`;
+  const uploadParams = {
+    folder: targetFolder,
+    timestamp,
+  };
+  const signature = buildSignature(uploadParams, config.apiSecret);
   const fileBuffer = fs.readFileSync(file.path);
+  const formData = new FormData();
 
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      apikey: config.key,
-      Authorization: `Bearer ${config.key}`,
-      "Content-Type": file.mimetype || "application/pdf",
-      "x-upsert": "false",
+  formData.append(
+    "file",
+    new Blob([fileBuffer], {
+      type: file.mimetype || "application/octet-stream",
+    }),
+    file.originalname || file.filename,
+  );
+  formData.append("api_key", config.apiKey);
+  formData.append("folder", targetFolder);
+  formData.append("timestamp", String(timestamp));
+  formData.append("signature", signature);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${config.cloudName}/auto/upload`,
+    {
+      method: "POST",
+      body: formData,
     },
-    body: fileBuffer,
-  });
+  );
+
+  const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const responseText = await response.text();
     throw new Error(
-      `Supabase upload failed (${response.status}): ${responseText}`,
+      `Cloudinary upload failed (${response.status}): ${
+        data?.error?.message || JSON.stringify(data)
+      }`,
     );
   }
 
-  return `${config.url}/storage/v1/object/public/${config.bucket}/${encodeStoragePath(
-    objectPath,
-  )}`;
+  return data.secure_url;
+};
+
+const getCloudinaryAssetFromUrl = (fileUrl) => {
+  const config = getCloudinaryConfig();
+
+  if (!config || !fileUrl) return null;
+
+  try {
+    const url = new URL(fileUrl);
+
+    if (url.hostname !== "res.cloudinary.com") return null;
+
+    const parts = url.pathname.split("/").filter(Boolean);
+    const cloudNameIndex = parts.indexOf(config.cloudName);
+
+    if (cloudNameIndex === -1) return null;
+
+    const resourceType = parts[cloudNameIndex + 1];
+    const uploadSegment = parts[cloudNameIndex + 2];
+
+    if (!resourceType || uploadSegment !== "upload") return null;
+
+    const objectParts = parts.slice(cloudNameIndex + 3);
+    const objectPathParts =
+      objectParts[0]?.startsWith("v") && /^\d+$/.test(objectParts[0].slice(1))
+        ? objectParts.slice(1)
+        : objectParts;
+    const filename = objectPathParts.pop();
+
+    if (!filename) return null;
+
+    const filenameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+    const publicId = [...objectPathParts, filenameWithoutExt].join("/");
+
+    return {
+      publicId,
+      resourceType,
+    };
+  } catch (error) {
+    return null;
+  }
 };
 
 const deleteFileFromStorage = async (fileUrl) => {
-  const config = getSupabaseConfig();
+  const config = getCloudinaryConfig();
+  const asset = getCloudinaryAssetFromUrl(fileUrl);
 
-  if (!config || !fileUrl || typeof fetch !== "function") return false;
+  if (!config || !asset || typeof fetch !== "function") return false;
 
-  const publicPrefix = `${config.url}/storage/v1/object/public/${config.bucket}/`;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const destroyParams = {
+    public_id: asset.publicId,
+    timestamp,
+  };
+  const signature = buildSignature(destroyParams, config.apiSecret);
+  const formData = new FormData();
 
-  if (!String(fileUrl).startsWith(publicPrefix)) return false;
+  formData.append("api_key", config.apiKey);
+  formData.append("public_id", asset.publicId);
+  formData.append("timestamp", String(timestamp));
+  formData.append("signature", signature);
 
-  const objectPath = decodeURIComponent(String(fileUrl).slice(publicPrefix.length));
-  const deleteUrl = `${config.url}/storage/v1/object/${config.bucket}/${encodeStoragePath(
-    objectPath,
-  )}`;
-
-  const response = await fetch(deleteUrl, {
-    method: "DELETE",
-    headers: {
-      apikey: config.key,
-      Authorization: `Bearer ${config.key}`,
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${config.cloudName}/${asset.resourceType}/destroy`,
+    {
+      method: "POST",
+      body: formData,
     },
-  });
+  );
 
-  return response.ok || response.status === 404;
+  if (!response.ok) return false;
+
+  const data = await response.json().catch(() => null);
+
+  return data?.result === "ok" || data?.result === "not found";
 };
 
 module.exports = {
