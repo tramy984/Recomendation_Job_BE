@@ -5,6 +5,7 @@ const {
   closeMyCompanyJob,
   createJobRequest,
   extendMyCompanyJob,
+  getCompanyJobsRequest,
   getJobApplicationsRequest,
   getJobDetailRequest,
   getMyCompanyJobs,
@@ -24,6 +25,7 @@ router.get("/job-types", getJobTypes);
 router.get("/levels", getLevels);
 router.get("/job-levels", getLevels);
 router.get("/me", verifyToken, getMyCompanyJobs);
+router.get("/company/:companyId", getCompanyJobsRequest);
 router.patch(
   "/applications/:applicationId/approve",
   verifyToken,

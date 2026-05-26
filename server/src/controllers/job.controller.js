@@ -947,6 +947,49 @@ const getMyCompanyJobs = async (req, res) => {
   }
 };
 
+const getCompanyJobsRequest = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    if (!isValidId(companyId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã công ty không hợp lệ.",
+      });
+    }
+
+    const { filters, error } = getCompanyJobFilters(req.query);
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error,
+      });
+    }
+
+    const jobs = await getJobsByCompanyId(companyId, filters);
+
+    return res.status(200).json({
+      success: true,
+      message: "Lấy danh sách tin tuyển dụng của công ty thành công.",
+      data: {
+        companyId: Number(companyId),
+        total: jobs.length,
+        filters,
+        jobs,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi lấy danh sách tin tuyển dụng theo công ty:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ. Vui lòng thử lại sau.",
+      error: error.message,
+    });
+  }
+};
+
 const createJobRequest = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -1268,6 +1311,7 @@ module.exports = {
   closeMyCompanyJob,
   createJobRequest,
   extendMyCompanyJob,
+  getCompanyJobsRequest,
   getJobApplicationsRequest,
   getJobDetailRequest,
   getMyCompanyJobs,
