@@ -1,24 +1,32 @@
 const nodemailer = require("nodemailer");
 
 const getMailTransporter = () => {
-  if (
-    !process.env.SMTP_USER ||
-    !process.env.SMTP_PASS
-  ) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     return null;
   }
 
-  return nodemailer.createTransport({
-    service: "gmail",
-
+  const baseConfig = {
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 60000,
+    greetingTimeout: 60000,
+    socketTimeout: 60000,
+  };
 
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
+  if (process.env.SMTP_HOST && process.env.SMTP_PORT) {
+    return nodemailer.createTransport({
+      ...baseConfig,
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === "true",
+    });
+  }
+
+  return nodemailer.createTransport({
+    ...baseConfig,
+    service: "gmail",
   });
 };
 
@@ -29,13 +37,11 @@ const sendMail = async ({ to, subject, text, html }) => {
     const transporter = getMailTransporter();
 
     if (!transporter) {
-      console.log("SMTP chưa được cấu hình");
+      console.log("SMTP is not configured");
       return false;
     }
 
-    console.log("Đang gửi email tới:", to);
-
-    await transporter.verify();
+    console.log("Sending email to:", to);
 
     const info = await transporter.sendMail({
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
@@ -45,11 +51,11 @@ const sendMail = async ({ to, subject, text, html }) => {
       html: html || `<p>${text}</p>`,
     });
 
-    console.log("Gửi email thành công:", info.messageId);
+    console.log("Email sent successfully:", info.messageId);
 
     return true;
   } catch (error) {
-    console.error("Lỗi gửi mail:", {
+    console.error("Send mail error:", {
       message: error.message,
       code: error.code,
       command: error.command,
