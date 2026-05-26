@@ -1,19 +1,22 @@
-const dns = require("dns");
 const nodemailer = require("nodemailer");
+const dns = require("dns");
 
 dns.setDefaultResultOrder("ipv4first");
 
 const getMailTransporter = () => {
   return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: process.env.SMTP_SECURE === "true",
+
     requireTLS: true,
 
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+
+    family: 4,
 
     connectionTimeout: 60000,
     greetingTimeout: 60000,
@@ -23,14 +26,14 @@ const getMailTransporter = () => {
 
 const sendMail = async ({ to, subject, text, html }) => {
   try {
-    if (!to) return false;
-
     console.log("Sending email to:", to);
 
     const transporter = getMailTransporter();
 
+    await transporter.verify();
+
     const info = await transporter.sendMail({
-      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      from: process.env.MAIL_FROM,
       to,
       subject,
       text,
@@ -38,6 +41,7 @@ const sendMail = async ({ to, subject, text, html }) => {
     });
 
     console.log("Send mail success:", info.messageId);
+
     return true;
   } catch (error) {
     console.error("Send mail error:", {
