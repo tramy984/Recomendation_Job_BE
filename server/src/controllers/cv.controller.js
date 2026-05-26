@@ -21,6 +21,32 @@ const removeOldFile = (fileUrl) => {
   }
 };
 
+const getCVUploadPath = (filename) => {
+  if (!filename || filename !== path.basename(filename)) {
+    return null;
+  }
+
+  if (path.extname(filename).toLowerCase() !== ".pdf") {
+    return null;
+  }
+
+  return path.join(__dirname, "../../uploads/cvs", filename);
+};
+
+const serveCVFile = (req, res) => {
+  const filePath = getCVUploadPath(req.params.filename);
+
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(404).json({
+      success: false,
+      message: "Không tìm thấy file CV.",
+      filename: req.params.filename,
+    });
+  }
+
+  return res.sendFile(filePath);
+};
+
 const getMyCVs = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -191,6 +217,7 @@ const deleteMyCV = async (req, res) => {
 
 module.exports = {
   getMyCVs,
+  serveCVFile,
   uploadMyCV,
   setMyDefaultCV,
   deleteMyCV,
