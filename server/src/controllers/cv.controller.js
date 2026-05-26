@@ -35,8 +35,15 @@ const getCVUploadPath = (filename) => {
 
 const serveCVFile = (req, res) => {
   const filePath = getCVUploadPath(req.params.filename);
+  const exists = filePath ? fs.existsSync(filePath) : false;
 
-  if (!filePath || !fs.existsSync(filePath)) {
+  console.log("SERVE CV FILE:", {
+    filename: req.params.filename,
+    filePath,
+    exists,
+  });
+
+  if (!filePath || !exists) {
     return res.status(404).json({
       success: false,
       message: "Không tìm thấy file CV.",
@@ -102,6 +109,23 @@ const uploadMyCV = async (req, res) => {
     const totalCV = await countCVByCandidateId(candidateId);
 
     const fileUrl = `/uploads/cvs/${req.file.filename}`;
+    const uploadedFileExists = fs.existsSync(req.file.path);
+
+    console.log("UPLOAD CV FILE:", {
+      originalname: req.file.originalname,
+      filename: req.file.filename,
+      path: req.file.path,
+      destination: req.file.destination,
+      fileUrl,
+      exists: uploadedFileExists,
+    });
+
+    if (!uploadedFileExists) {
+      return res.status(500).json({
+        success: false,
+        message: "File CV chưa được lưu trên server.",
+      });
+    }
 
     const cv = await createCV({
       candidateId,
