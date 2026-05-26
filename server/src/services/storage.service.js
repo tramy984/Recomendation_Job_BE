@@ -2,9 +2,9 @@ const crypto = require("crypto");
 const fs = require("fs");
 
 const getCloudinaryConfig = () => {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const cloudName = "duivufsyh";
+  const apiKey = "861233939571958";
+  const apiSecret = "mSDh5T_477E2v42dREbeSJFXiIo";
   const rootFolder = process.env.CLOUDINARY_UPLOAD_FOLDER || "recommendation-job";
 
   if (!cloudName || !apiKey || !apiSecret) {
