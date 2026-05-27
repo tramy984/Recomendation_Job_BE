@@ -2,19 +2,20 @@ const crypto = require("crypto");
 const fs = require("fs");
 
 const getCloudinaryConfig = () => {
-  const cloudName = "duivufsyh";
-  const apiKey = "861233939571958";
-  const apiSecret = "mSDh5T_477E2v42dREbeSJFXiIo";
-  const rootFolder = process.env.CLOUDINARY_UPLOAD_FOLDER || "recommendation-job";
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const rootFolder =
+    process.env.CLOUDINARY_UPLOAD_FOLDER || "recommendation-job";
 
   if (!cloudName || !apiKey || !apiSecret) {
     return null;
   }
 
   return {
+    cloudName,
     apiKey,
     apiSecret,
-    cloudName,
     rootFolder,
   };
 };
@@ -56,33 +57,52 @@ const uploadFileToStorage = async ({ file, folder }) => {
     throw new Error("Cloudinary storage is not configured.");
   }
 
-  if (typeof fetch !== "function" || typeof FormData !== "function") {
-    throw new Error("Node fetch/FormData API is not available for Cloudinary upload.");
+  if (!file?.path) {
+    throw new Error("File path is missing.");
   }
 
+  if (typeof fetch !== "function" || typeof FormData !== "function") {
+    throw new Error(
+      "Node fetch/FormData API is not available for Cloudinary upload.",
+    );
+  }
+
+  const pdfFile = isPdfFile(file);
+  const resourceType = pdfFile ? "raw" : "auto";
+
   const timestamp = Math.floor(Date.now() / 1000);
+
   const targetFolder = `${normalizeFolder(config.rootFolder)}/${normalizeFolder(
     folder,
   )}`;
+
   const uploadParams = {
     folder: targetFolder,
     timestamp,
+    ...(pdfFile ? { flags: "attachment" } : {}),
   };
+
   const signature = buildSignature(uploadParams, config.apiSecret);
+
   const fileBuffer = fs.readFileSync(file.path);
   const formData = new FormData();
-  const resourceType = isPdfFile(file) ? "raw" : "auto";
 
   formData.append(
     "file",
     new Blob([fileBuffer], {
       type: file.mimetype || "application/octet-stream",
     }),
-    file.originalname || file.filename,
+    file.originalname || file.filename || "file",
   );
+
   formData.append("api_key", config.apiKey);
   formData.append("folder", targetFolder);
   formData.append("timestamp", String(timestamp));
+
+  if (pdfFile) {
+    formData.append("flags", "attachment");
+  }
+
   formData.append("signature", signature);
 
   const response = await fetch(
@@ -103,6 +123,12 @@ const uploadFileToStorage = async ({ file, folder }) => {
     );
   }
 
+  console.log("Cloudinary upload success:", {
+    resource_type: data.resource_type,
+    secure_url: data.secure_url,
+    public_id: data.public_id,
+  });
+
   return data.secure_url;
 };
 
@@ -117,6 +143,7 @@ const getCloudinaryAssetFromUrl = (fileUrl) => {
     if (url.hostname !== "res.cloudinary.com") return null;
 
     const parts = url.pathname.split("/").filter(Boolean);
+
     const cloudNameIndex = parts.indexOf(config.cloudName);
 
     if (cloudNameIndex === -1) return null;
@@ -124,20 +151,27 @@ const getCloudinaryAssetFromUrl = (fileUrl) => {
     const resourceType = parts[cloudNameIndex + 1];
     const uploadSegment = parts[cloudNameIndex + 2];
 
-    if (!resourceType || uploadSegment !== "upload") return null;
+    if (!resourceType || uploadSegment !== "upload") {
+      return null;
+    }
 
-    const objectParts = parts.slice(cloudNameIndex + 3);
-    const objectPathParts =
-      objectParts[0]?.startsWith("v") && /^\d+$/.test(objectParts[0].slice(1))
-        ? objectParts.slice(1)
-        : objectParts;
-    const filename = objectPathParts.pop();
+    let objectParts = parts.slice(cloudNameIndex + 3);
+
+    if (
+      objectParts[0]?.startsWith("v") &&
+      /^\d+$/.test(objectParts[0].slice(1))
+    ) {
+      objectParts = objectParts.slice(1);
+    }
+
+    const filename = objectParts.pop();
 
     if (!filename) return null;
 
     const filenameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+
     const publicId = [
-      ...objectPathParts,
+      ...objectParts,
       resourceType === "raw" ? filename : filenameWithoutExt,
     ].join("/");
 
@@ -154,14 +188,19 @@ const deleteFileFromStorage = async (fileUrl) => {
   const config = getCloudinaryConfig();
   const asset = getCloudinaryAssetFromUrl(fileUrl);
 
-  if (!config || !asset || typeof fetch !== "function") return false;
+  if (!config || !asset || typeof fetch !== "function") {
+    return false;
+  }
 
   const timestamp = Math.floor(Date.now() / 1000);
+
   const destroyParams = {
     public_id: asset.publicId,
     timestamp,
   };
+
   const signature = buildSignature(destroyParams, config.apiSecret);
+
   const formData = new FormData();
 
   formData.append("api_key", config.apiKey);
@@ -177,7 +216,9 @@ const deleteFileFromStorage = async (fileUrl) => {
     },
   );
 
-  if (!response.ok) return false;
+  if (!response.ok) {
+    return false;
+  }
 
   const data = await response.json().catch(() => null);
 
@@ -188,7 +229,12 @@ module.exports = {
   deleteCVFromStorage: deleteFileFromStorage,
   deleteFileFromStorage,
   isCloudStorageConfigured,
+
   uploadCVToStorage: ({ file, candidateId }) =>
-    uploadFileToStorage({ file, folder: `cvs/candidates/${candidateId}` }),
+    uploadFileToStorage({
+      file,
+      folder: `cvs/candidates/${candidateId}`,
+    }),
+
   uploadFileToStorage,
 };
