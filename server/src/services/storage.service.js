@@ -79,7 +79,6 @@ const uploadFileToStorage = async ({ file, folder }) => {
   const uploadParams = {
     folder: targetFolder,
     timestamp,
-    ...(pdfFile ? { flags: "attachment" } : {}),
   };
 
   const signature = buildSignature(uploadParams, config.apiSecret);
@@ -98,11 +97,6 @@ const uploadFileToStorage = async ({ file, folder }) => {
   formData.append("api_key", config.apiKey);
   formData.append("folder", targetFolder);
   formData.append("timestamp", String(timestamp));
-
-  if (pdfFile) {
-    formData.append("flags", "attachment");
-  }
-
   formData.append("signature", signature);
 
   const response = await fetch(
@@ -143,7 +137,6 @@ const getCloudinaryAssetFromUrl = (fileUrl) => {
     if (url.hostname !== "res.cloudinary.com") return null;
 
     const parts = url.pathname.split("/").filter(Boolean);
-
     const cloudNameIndex = parts.indexOf(config.cloudName);
 
     if (cloudNameIndex === -1) return null;
