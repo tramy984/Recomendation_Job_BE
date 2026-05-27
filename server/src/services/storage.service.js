@@ -40,6 +40,15 @@ const isCloudStorageConfigured = () => {
   return Boolean(getCloudinaryConfig());
 };
 
+const isPdfFile = (file) => {
+  return (
+    file?.mimetype === "application/pdf" ||
+    String(file?.originalname || file?.filename || "")
+      .toLowerCase()
+      .endsWith(".pdf")
+  );
+};
+
 const uploadFileToStorage = async ({ file, folder }) => {
   const config = getCloudinaryConfig();
 
@@ -62,11 +71,7 @@ const uploadFileToStorage = async ({ file, folder }) => {
   const signature = buildSignature(uploadParams, config.apiSecret);
   const fileBuffer = fs.readFileSync(file.path);
   const formData = new FormData();
-  const resourceType =
-    file.mimetype === "application/pdf" ||
-    String(file.originalname || file.filename).toLowerCase().endsWith(".pdf")
-      ? "raw"
-      : "auto";
+  const resourceType = isPdfFile(file) ? "raw" : "auto";
 
   formData.append(
     "file",
@@ -131,7 +136,10 @@ const getCloudinaryAssetFromUrl = (fileUrl) => {
     if (!filename) return null;
 
     const filenameWithoutExt = filename.replace(/\.[^/.]+$/, "");
-    const publicId = [...objectPathParts, filenameWithoutExt].join("/");
+    const publicId = [
+      ...objectPathParts,
+      resourceType === "raw" ? filename : filenameWithoutExt,
+    ].join("/");
 
     return {
       publicId,
