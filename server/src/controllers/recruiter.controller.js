@@ -180,7 +180,6 @@ const hasUpdatableRecruiterField = (updateData = {}) => {
     "date_of_birth",
     "avatar",
     "certificate",
-    "status",
     "companyId",
     "company_id",
   ];
@@ -546,6 +545,7 @@ const updateMyRecruiterProfile = async (req, res) => {
     const updateData = getUpdateData(req.body);
     delete updateData.isVerifyPhone;
     delete updateData.is_verify_phone;
+    delete updateData.status;
 
     const oldAvatar = recruiter.avatar;
     const shouldDeleteOldAvatar =
