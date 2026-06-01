@@ -594,7 +594,9 @@ const approvePendingCompany = async (pendingCompanyId, reviewedBy) => {
     await client.query(
       `
       UPDATE recruiter
-      SET company_id = $1
+      SET
+        company_id = $1,
+        status = TRUE
       WHERE id = $2
       `,
       [companyId, pendingCompany.recruiter_id]

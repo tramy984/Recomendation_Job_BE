@@ -58,6 +58,7 @@ CREATE TABLE recruiter (
     date_of_birth DATE,
     avatar TEXT,
     company_id BIGINT,
+    status BOOLEAN DEFAULT FALSE,
     is_verify_phone BOOLEAN DEFAULT FALSE,
     CONSTRAINT fk_recruiter_user
         FOREIGN KEY (user_id)
