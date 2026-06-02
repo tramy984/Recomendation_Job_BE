@@ -224,6 +224,12 @@ CREATE TABLE cvs (
     file_url TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_default BOOLEAN DEFAULT FALSE,
+    cv_text TEXT,
+    id_industry BIGINT,
+    degree VARCHAR(100),
+    location VARCHAR(255),
+    exp_min INTEGER,
+    exp_max INTEGER,
     CONSTRAINT fk_cvs_candidate
         FOREIGN KEY (candidate_id)
         REFERENCES candidate_profile(id)

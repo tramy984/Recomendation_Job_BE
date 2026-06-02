@@ -42,15 +42,24 @@ const countCVByCandidateId = async (candidateId) => {
   return result.rows[0].total;
 };
 
+const selectCVFields = `
+  id,
+  candidate_id,
+  file_url,
+  created_at,
+  is_default,
+  cv_text,
+  id_industry,
+  degree,
+  location,
+  exp_min,
+  exp_max
+`;
+
 const findCVsByCandidateId = async (candidateId) => {
   const result = await pool.query(
     `
-    SELECT
-      id,
-      candidate_id,
-      file_url,
-      created_at,
-      is_default
+    SELECT ${selectCVFields}
     FROM cvs
     WHERE candidate_id = $1
     ORDER BY is_default DESC, created_at DESC
@@ -64,12 +73,7 @@ const findCVsByCandidateId = async (candidateId) => {
 const findCVByIdAndCandidateId = async (cvId, candidateId) => {
   const result = await pool.query(
     `
-    SELECT
-      id,
-      candidate_id,
-      file_url,
-      created_at,
-      is_default
+    SELECT ${selectCVFields}
     FROM cvs
     WHERE id = $1 AND candidate_id = $2
     `,
@@ -107,12 +111,7 @@ const createCV = async ({ candidateId, fileUrl, isDefault }) => {
         created_at
       )
       VALUES ($1, $2, $3, NOW())
-      RETURNING
-        id,
-        candidate_id,
-        file_url,
-        created_at,
-        is_default
+      RETURNING ${selectCVFields}
       `,
       [candidateId, fileUrl, isDefault],
     );
@@ -126,6 +125,67 @@ const createCV = async ({ candidateId, fileUrl, isDefault }) => {
   } finally {
     client.release();
   }
+};
+
+const findIndustryIdByName = async (industryName) => {
+  if (!industryName) return null;
+
+  const result = await pool.query(
+    `
+    SELECT id
+    FROM industry
+    WHERE LOWER(name) = LOWER($1)
+    ORDER BY id ASC
+    LIMIT 1
+    `,
+    [industryName],
+  );
+
+  if (result.rows[0]?.id) {
+    return result.rows[0].id;
+  }
+
+  const fuzzyResult = await pool.query(
+    `
+    SELECT id
+    FROM industry
+    WHERE name ILIKE $1 OR $2 ILIKE CONCAT('%', name, '%')
+    ORDER BY LENGTH(name) DESC, id ASC
+    LIMIT 1
+    `,
+    [`%${industryName}%`, industryName],
+  );
+
+  return fuzzyResult.rows[0]?.id || null;
+};
+
+const updateCVExtraction = async ({
+  cvId,
+  candidateId,
+  cvText,
+  industryId,
+  degree,
+  location,
+  expMin,
+  expMax,
+}) => {
+  const result = await pool.query(
+    `
+    UPDATE cvs
+    SET
+      cv_text = $3,
+      id_industry = $4,
+      degree = $5,
+      location = $6,
+      exp_min = $7,
+      exp_max = $8
+    WHERE id = $1 AND candidate_id = $2
+    RETURNING ${selectCVFields}
+    `,
+    [cvId, candidateId, cvText, industryId, degree, location, expMin, expMax],
+  );
+
+  return result.rows[0];
 };
 
 const setDefaultCV = async ({ candidateId, cvId }) => {
@@ -162,12 +222,7 @@ const setDefaultCV = async ({ candidateId, cvId }) => {
       UPDATE cvs
       SET is_default = true
       WHERE id = $1 AND candidate_id = $2
-      RETURNING
-        id,
-        candidate_id,
-        file_url,
-        created_at,
-        is_default
+      RETURNING ${selectCVFields}
       `,
       [cvId, candidateId],
     );
@@ -193,12 +248,7 @@ const deleteCVByIdAndCandidateId = async ({ cvId, candidateId }) => {
       `
       DELETE FROM cvs
       WHERE id = $1 AND candidate_id = $2
-      RETURNING
-        id,
-        candidate_id,
-        file_url,
-        created_at,
-        is_default
+      RETURNING ${selectCVFields}
       `,
       [cvId, candidateId],
     );
@@ -243,7 +293,9 @@ module.exports = {
   countCVByCandidateId,
   findCVsByCandidateId,
   findCVByIdAndCandidateId,
+  findIndustryIdByName,
   createCV,
+  updateCVExtraction,
   setDefaultCV,
   deleteCVByIdAndCandidateId,
 };

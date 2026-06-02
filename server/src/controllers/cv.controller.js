@@ -6,6 +6,8 @@ const {
   countCVByCandidateId,
   findCVsByCandidateId,
   createCV,
+  findIndustryIdByName,
+  updateCVExtraction,
   setDefaultCV,
   deleteCVByIdAndCandidateId,
 } = require("../models/cv.model");
@@ -13,6 +15,7 @@ const {
   deleteCVFromStorage,
   uploadCVToStorage,
 } = require("../services/storage.service");
+const { extractCVFromUrl } = require("../services/cv_extract.service");
 
 const removeOldFile = (fileUrl) => {
   if (!fileUrl) return;
@@ -120,21 +123,49 @@ const uploadMyCV = async (req, res) => {
       candidateId,
     });
 
-    const cv = await createCV({
+    let cv = await createCV({
       candidateId,
       fileUrl,
       isDefault: totalCV === 0,
     });
+
+    let extractError = null;
+
+    try {
+      const extractedCV = await extractCVFromUrl(fileUrl);
+      const industryId =
+        extractedCV.industryId ||
+        (await findIndustryIdByName(extractedCV.industryName));
+
+      cv = await updateCVExtraction({
+        cvId: cv.id,
+        candidateId,
+        cvText: extractedCV.cvText,
+        industryId,
+        degree: extractedCV.degree,
+        location: extractedCV.location,
+        expMin: extractedCV.expMin,
+        expMax: extractedCV.expMax,
+      });
+    } catch (error) {
+      extractError = error.message;
+      console.log("EXTRACT CV ERROR:", error);
+    }
 
     removeOldFile(`/uploads/cvs/${req.file.filename}`);
 
     return res.status(201).json({
       success: true,
       message:
-        totalCV === 0
+        extractError
+          ? "Lưu CV thành công nhưng trích xuất thông tin CV thất bại."
+          : totalCV === 0
           ? "Lưu CV thành công. CV này đã được đặt làm mặc định."
           : "Lưu CV thành công.",
-      data: cv,
+      data: {
+        ...cv,
+        extract_error: extractError,
+      },
     });
   } catch (error) {
     console.log("UPLOAD MY CV ERROR:", error);
