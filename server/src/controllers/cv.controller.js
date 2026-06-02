@@ -15,7 +15,7 @@ const {
   deleteCVFromStorage,
   uploadCVToStorage,
 } = require("../services/storage.service");
-const { extractCVFromUrl } = require("../services/cv_extract.service");
+const { extractCVFromFile } = require("../services/cv_extract.service");
 
 const removeOldFile = (fileUrl) => {
   if (!fileUrl) return;
@@ -132,10 +132,12 @@ const uploadMyCV = async (req, res) => {
     let extractError = null;
 
     try {
-      const extractedCV = await extractCVFromUrl(fileUrl);
-      const industryId =
-        extractedCV.industryId ||
-        (await findIndustryIdByName(extractedCV.industryName));
+      const extractedCV = await extractCVFromFile({
+        filePath: req.file.path,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+      });
+      const industryId = await findIndustryIdByName(extractedCV.industryName);
 
       cv = await updateCVExtraction({
         cvId: cv.id,
