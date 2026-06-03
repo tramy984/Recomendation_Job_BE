@@ -16,7 +16,7 @@ const getCVExtractApiUrl = () => {
     DEFAULT_AI_SERVER_URL
   ).replace(/\/+$/, "");
 
-  return `${serverUrl}/extract-cv-file`;
+  return `${serverUrl}/extract-cv-url`;
 };
 
 const getCVExtractTimeoutMs = () => {
