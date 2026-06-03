@@ -1,6 +1,4 @@
-const fs = require("fs");
 const axios = require("axios");
-const FormData = require("form-data");
 
 const DEFAULT_AI_SERVER_URL = "http://localhost:8000";
 
@@ -39,6 +37,7 @@ const normalizeInteger = (value) => {
   if (value === undefined || value === null || value === "") return null;
 
   const number = Number(value);
+
   return Number.isInteger(number) ? number : null;
 };
 
@@ -55,40 +54,61 @@ const normalizeExtractedCV = (payload) => {
   };
 };
 
-const extractCVFromFile = async ({ filePath, originalName, mimetype }) => {
-  if (!filePath) {
-    throw new Error("filePath is required to extract CV.");
+const extractCVFromUrl = async ({ fileUrl }) => {
+  if (!fileUrl) {
+    throw new Error("fileUrl is required to extract CV.");
   }
 
-  if (!fs.existsSync(filePath)) {
-    throw new Error("CV file does not exist.");
-  }
+  const apiUrl = getCVExtractApiUrl();
 
-  const formData = new FormData();
+  console.log("CV EXTRACT API URL:", apiUrl);
+  console.log("CV FILE URL:", fileUrl);
 
-  formData.append("file", fs.createReadStream(filePath), {
-    filename: originalName || "cv.pdf",
-    contentType: mimetype || "application/pdf",
-  });
-
-  const response = await axios.post(getCVExtractApiUrl(), formData, {
-    headers: formData.getHeaders(),
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-    timeout: getCVExtractTimeoutMs(),
-  });
-
-  const payload = response.data;
-
-  if (payload?.success === false) {
-    throw new Error(
-      payload?.message || payload?.error || "CV extract API returned failure.",
+  try {
+    const response = await axios.post(
+      apiUrl,
+      {
+        file_url: fileUrl,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: getCVExtractTimeoutMs(),
+      },
     );
-  }
 
-  return normalizeExtractedCV(payload);
+    const payload = response.data;
+
+    console.log("AI EXTRACT RAW PAYLOAD:", JSON.stringify(payload, null, 2));
+
+    if (payload?.success === false) {
+      throw new Error(
+        payload?.message ||
+          payload?.error ||
+          "CV extract API returned failure.",
+      );
+    }
+
+    const normalized = normalizeExtractedCV(payload);
+
+    console.log("AI EXTRACT NORMALIZED:", normalized);
+
+    return normalized;
+  } catch (error) {
+    console.log("AI EXTRACT REQUEST ERROR:");
+
+    if (error.response) {
+      console.log("STATUS:", error.response.status);
+      console.log("DATA:", JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.log("MESSAGE:", error.message);
+    }
+
+    throw error;
+  }
 };
 
 module.exports = {
-  extractCVFromFile,
+  extractCVFromUrl,
 };
