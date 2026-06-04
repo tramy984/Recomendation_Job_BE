@@ -3,6 +3,10 @@ const {
   findCandidateByUserId,
   updateCandidateByUserId,
 } = require("../models/candidate.model");
+const { findDefaultCVByCandidateId } = require("../models/cv.model");
+const {
+  findRecommendedJobsByIdsAndIndustry,
+} = require("../models/job.model");
 const {
   applyJobForCandidate,
   findApplicationsByCandidateId,
@@ -19,6 +23,7 @@ const {
   deleteFileFromStorage,
   uploadFileToStorage,
 } = require("../services/storage.service");
+const { recommendJobsByCVText } = require("../services/recommend.service");
 
 const removeLocalUploadedFile = async (file) => {
   if (!file?.path) return;
@@ -213,6 +218,111 @@ const getMySavedJobs = async (req, res) => {
     });
   } catch (error) {
     console.log("GET MY SAVED JOBS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server.",
+      error: error.message,
+    });
+  }
+};
+
+const getMyRecommendedJobs = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Bạn chưa đăng nhập.",
+      });
+    }
+
+    if (role !== "candidate") {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ ứng viên mới có quyền xem việc làm gợi ý.",
+      });
+    }
+
+    const candidate = await findCandidateByUserId(userId);
+
+    if (!candidate) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy candidate.",
+      });
+    }
+
+    const defaultCV = await findDefaultCVByCandidateId(candidate.id);
+
+    if (!defaultCV) {
+      return res.status(404).json({
+        success: false,
+        message: "Bạn chưa có CV mặc định.",
+      });
+    }
+
+    if (!defaultCV.cv_text) {
+      return res.status(400).json({
+        success: false,
+        message: "CV mặc định chưa có nội dung để gợi ý việc làm.",
+      });
+    }
+
+    if (!defaultCV.id_industry) {
+      return res.status(400).json({
+        success: false,
+        message: "CV mặc định chưa có ngành nghề để lọc việc làm phù hợp.",
+      });
+    }
+
+    const recommendedJobs = await recommendJobsByCVText({
+      cvText: defaultCV.cv_text,
+    });
+    console.log(
+      `Recommended ${recommendedJobs.length} jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
+    );
+    const seenJobIds = new Set();
+    const jobIds = [];
+    const scores = [];
+
+    recommendedJobs.forEach((job) => {
+      const jobId = job?.jobId;
+
+      if (!isValidId(jobId) || seenJobIds.has(Number(jobId))) {
+        return;
+      }
+
+      seenJobIds.add(Number(jobId));
+      jobIds.push(Number(jobId));
+      scores.push(Number.isFinite(Number(job.score)) ? Number(job.score) : null);
+    });
+
+    const jobs = await findRecommendedJobsByIdsAndIndustry({
+      jobIds,
+      scores,
+      industryId: defaultCV.id_industry,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Lấy danh sách việc làm gợi ý thành công.",
+      data: {
+        candidateId: candidate.id,
+        cv: {
+          id: defaultCV.id,
+          industryId: defaultCV.id_industry,
+          industry: defaultCV.industry,
+        },
+        totalRecommended: recommendedJobs.length,
+        total: jobs.length,
+        jobs,
+      },
+    });
+  } catch (error) {
+    console.log("GET MY RECOMMENDED JOBS ERROR:", error);
 
     return res.status(500).json({
       success: false,
@@ -513,6 +623,7 @@ module.exports = {
   getCandidateDetail,
   getMyApplications,
   getMyCandidate,
+  getMyRecommendedJobs,
   getMySavedJobs,
   saveMyJob,
   unsaveMyJob,

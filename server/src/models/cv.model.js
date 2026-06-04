@@ -83,6 +83,44 @@ const findCVByIdAndCandidateId = async (cvId, candidateId) => {
   return result.rows[0];
 };
 
+const findDefaultCVByCandidateId = async (candidateId) => {
+  if (!candidateId) return null;
+
+  const result = await pool.query(
+    `
+    SELECT
+      cv.id,
+      cv.candidate_id,
+      cv.file_url,
+      cv.created_at,
+      cv.is_default,
+      cv.cv_text,
+      cv.id_industry,
+      cv.degree,
+      cv.location,
+      cv.exp_min,
+      cv.exp_max,
+      CASE
+        WHEN i.id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', i.id,
+          'name', i.name,
+          'description', i.description
+        )
+      END AS industry
+    FROM cvs cv
+    LEFT JOIN industry i ON i.id = cv.id_industry
+    WHERE cv.candidate_id = $1
+      AND COALESCE(cv.is_default, FALSE) = TRUE
+    ORDER BY cv.created_at DESC, cv.id DESC
+    LIMIT 1
+    `,
+    [candidateId],
+  );
+
+  return result.rows[0] || null;
+};
+
 const createCV = async ({ candidateId, fileUrl, isDefault }) => {
   await ensureCVTableDefaults();
 
@@ -293,6 +331,7 @@ module.exports = {
   countCVByCandidateId,
   findCVsByCandidateId,
   findCVByIdAndCandidateId,
+  findDefaultCVByCandidateId,
   findIndustryIdByName,
   createCV,
   updateCVExtraction,

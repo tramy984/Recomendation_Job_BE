@@ -5,6 +5,7 @@ const {
   getCandidateDetail,
   getMyApplications,
   getMyCandidate,
+  getMyRecommendedJobs,
   getMySavedJobs,
   saveMyJob,
   unsaveMyJob,
@@ -20,6 +21,8 @@ const router = express.Router();
 router.get("/me", verifyToken, getMyCandidate);
 
 router.get("/saved-jobs", verifyToken, getMySavedJobs);
+
+router.get("/recommended-jobs", verifyToken, getMyRecommendedJobs);
 
 router.get("/applications", verifyToken, getMyApplications);
 
