@@ -1,7 +1,6 @@
 const axios = require("axios");
 
-const DEFAULT_AI_SERVER_URL =
-  "https://model-recomendation-job-ejfhexetfhg3faeq.southeastasia-01.azurewebsites.net/";
+const DEFAULT_AI_SERVER_URL = "https://my984-recommendation-job.hf.space/";
 
 const getCVExtractApiUrl = () => {
   const apiUrl = process.env.CV_EXTRACT_API_URL;
