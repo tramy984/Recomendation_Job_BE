@@ -16,6 +16,7 @@ const { getRecruiterByUserId } = require("../models/recruiter.model");
 const {
   notifyApplicationReviewed,
 } = require("../services/notification.service");
+const { syncJobToAI } = require("../services/job_ai.service");
 
 const getJobPayload = (body = {}) => {
   if (body.job) return { ...body.job };
@@ -1155,6 +1156,11 @@ const createJobRequest = async (req, res) => {
       ),
     });
 
+    await syncJobToAI({
+      job,
+      action: "create",
+    });
+
     return res.status(201).json({
       success: true,
       message: "Tạo tin tuyển dụng thành công.",
@@ -1229,6 +1235,11 @@ const updateJob = async (req, res) => {
       jobBenefit,
       jobRequirement,
       industryIds,
+    });
+
+    await syncJobToAI({
+      job: updatedJob,
+      action: "update",
     });
 
     return res.status(200).json({
