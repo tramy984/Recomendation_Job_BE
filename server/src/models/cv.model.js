@@ -6,6 +6,9 @@ const ensureCVTableDefaults = () => {
   if (!tableReadyPromise) {
     tableReadyPromise = pool.query(`
       ALTER TABLE cvs
+        ADD COLUMN IF NOT EXISTS original_name VARCHAR(255);
+
+      ALTER TABLE cvs
         ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
 
       ALTER TABLE cvs
@@ -46,6 +49,7 @@ const selectCVFields = `
   id,
   candidate_id,
   file_url,
+  original_name,
   created_at,
   is_default,
   cv_text,
@@ -92,6 +96,7 @@ const findDefaultCVByCandidateId = async (candidateId) => {
       cv.id,
       cv.candidate_id,
       cv.file_url,
+      cv.original_name,
       cv.created_at,
       cv.is_default,
       cv.cv_text,
@@ -121,7 +126,7 @@ const findDefaultCVByCandidateId = async (candidateId) => {
   return result.rows[0] || null;
 };
 
-const createCV = async ({ candidateId, fileUrl, isDefault }) => {
+const createCV = async ({ candidateId, fileUrl, originalName, isDefault }) => {
   await ensureCVTableDefaults();
 
   const client = await pool.connect();
@@ -145,13 +150,14 @@ const createCV = async ({ candidateId, fileUrl, isDefault }) => {
       INSERT INTO cvs (
         candidate_id,
         file_url,
+        original_name,
         is_default,
         created_at
       )
-      VALUES ($1, $2, $3, NOW())
+      VALUES ($1, $2, $3, $4, NOW())
       RETURNING ${selectCVFields}
       `,
-      [candidateId, fileUrl, isDefault],
+      [candidateId, fileUrl, originalName, isDefault],
     );
 
     await client.query("COMMIT");

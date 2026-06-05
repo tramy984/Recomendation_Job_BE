@@ -19,6 +19,28 @@ fs.mkdirSync(pendingCompanyCertificateUploadDir, { recursive: true });
 fs.mkdirSync(pendingCompanyLogoUploadDir, { recursive: true });
 fs.mkdirSync(candidateUploadDir, { recursive: true });
 fs.mkdirSync(cvUploadDir, { recursive: true });
+
+const looksLikeMojibake = (value) => {
+  return /(?:Ã.|Â.|Ä.|Æ.|á[º»]|à[º»]|â[º»]|í[º»]|ó[º»]|ú[º»]|Ð|ð)/.test(
+    value,
+  );
+};
+
+const normalizeUploadedFileName = (originalName, fallbackName) => {
+  const rawName = String(originalName || "").trim();
+  const decodedName = looksLikeMojibake(rawName)
+    ? Buffer.from(rawName, "latin1").toString("utf8")
+    : rawName;
+
+  const safeName = path
+    .basename(decodedName)
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return safeName || fallbackName;
+};
+
 const recruiterAvatarStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, recruiterUploadDir);
@@ -61,6 +83,8 @@ const cvStorage = multer.diskStorage({
     cb(null, cvUploadDir);
   },
   filename: (_req, file, cb) => {
+    file.originalname = normalizeUploadedFileName(file.originalname, "cv.pdf");
+
     const ext = path.extname(file.originalname).toLowerCase();
 
     const baseName =

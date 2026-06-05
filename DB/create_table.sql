@@ -222,6 +222,7 @@ CREATE TABLE cvs (
     id BIGSERIAL PRIMARY KEY,
     candidate_id BIGINT,
     file_url TEXT NOT NULL,
+    original_name VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_default BOOLEAN DEFAULT FALSE,
     cv_text TEXT,
