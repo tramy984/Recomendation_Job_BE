@@ -23,7 +23,10 @@ const {
   deleteFileFromStorage,
   uploadFileToStorage,
 } = require("../services/storage.service");
-const { recommendJobsByCVText } = require("../services/recommend.service");
+const {
+  recommendJobsByCVText,
+  rerankRecommendedJobs,
+} = require("../services/recommend.service");
 
 const removeLocalUploadedFile = async (file) => {
   if (!file?.path) return;
@@ -305,6 +308,11 @@ const getMyRecommendedJobs = async (req, res) => {
       scores,
       industryId: defaultCV.id_industry,
     });
+    const rerankedJobs = rerankRecommendedJobs({
+      jobs,
+      candidate,
+      cv: defaultCV,
+    });
 
     return res.status(200).json({
       success: true,
@@ -317,8 +325,8 @@ const getMyRecommendedJobs = async (req, res) => {
           industry: defaultCV.industry,
         },
         totalRecommended: recommendedJobs.length,
-        total: jobs.length,
-        jobs,
+        total: rerankedJobs.length,
+        jobs: rerankedJobs,
       },
     });
   } catch (error) {
