@@ -33,6 +33,7 @@ const getApplicationById = async (applicationId, client = pool) => {
           'id', cv.id,
           'candidate_id', cv.candidate_id,
           'file_url', cv.file_url,
+          'original_name', cv.original_name,
           'created_at', cv.created_at,
           'is_default', COALESCE(cv.is_default, FALSE)
         )
@@ -214,6 +215,7 @@ const findApplicationsByCandidateId = async (candidateId) => {
           'id', cv.id,
           'candidate_id', cv.candidate_id,
           'file_url', cv.file_url,
+          'original_name', cv.original_name,
           'created_at', cv.created_at,
           'is_default', COALESCE(cv.is_default, FALSE)
         )

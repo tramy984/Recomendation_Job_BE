@@ -126,6 +126,7 @@ const uploadMyCV = async (req, res) => {
     let cv = await createCV({
       candidateId,
       fileUrl,
+      originalName: req.file.originalname,
       isDefault: totalCV === 0,
     });
 
