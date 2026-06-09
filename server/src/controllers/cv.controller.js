@@ -249,10 +249,12 @@ const deleteMyCV = async (req, res) => {
       });
     }
 
-    const deletedFromStorage = await deleteCVFromStorage(deletedCV.file_url);
+    if (deletedCV.delete_type === "hard") {
+      const deletedFromStorage = await deleteCVFromStorage(deletedCV.file_url);
 
-    if (!deletedFromStorage) {
-      removeOldFile(deletedCV.file_url);
+      if (!deletedFromStorage) {
+        removeOldFile(deletedCV.file_url);
+      }
     }
 
     return res.status(200).json({

@@ -9,6 +9,12 @@ const ensureCVTableDefaults = () => {
         ADD COLUMN IF NOT EXISTS original_name VARCHAR(255);
 
       ALTER TABLE cvs
+        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+
+      ALTER TABLE cvs
+        ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
+      ALTER TABLE cvs
         ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
 
       ALTER TABLE cvs
@@ -33,11 +39,14 @@ const findCandidateIdByUserId = async (userId) => {
 };
 
 const countCVByCandidateId = async (candidateId) => {
+  await ensureCVTableDefaults();
+
   const result = await pool.query(
     `
     SELECT COUNT(*)::int AS total
     FROM cvs
     WHERE candidate_id = $1
+      AND COALESCE(is_deleted, FALSE) = FALSE
     `,
     [candidateId],
   );
@@ -57,15 +66,20 @@ const selectCVFields = `
   degree,
   location,
   exp_min,
-  exp_max
+  exp_max,
+  deleted_at,
+  is_deleted
 `;
 
 const findCVsByCandidateId = async (candidateId) => {
+  await ensureCVTableDefaults();
+
   const result = await pool.query(
     `
     SELECT ${selectCVFields}
     FROM cvs
     WHERE candidate_id = $1
+      AND COALESCE(is_deleted, FALSE) = FALSE
     ORDER BY is_default DESC, created_at DESC
     `,
     [candidateId],
@@ -75,11 +89,14 @@ const findCVsByCandidateId = async (candidateId) => {
 };
 
 const findCVByIdAndCandidateId = async (cvId, candidateId) => {
+  await ensureCVTableDefaults();
+
   const result = await pool.query(
     `
     SELECT ${selectCVFields}
     FROM cvs
     WHERE id = $1 AND candidate_id = $2
+      AND COALESCE(is_deleted, FALSE) = FALSE
     `,
     [cvId, candidateId],
   );
@@ -89,6 +106,8 @@ const findCVByIdAndCandidateId = async (cvId, candidateId) => {
 
 const findDefaultCVByCandidateId = async (candidateId) => {
   if (!candidateId) return null;
+
+  await ensureCVTableDefaults();
 
   const result = await pool.query(
     `
@@ -117,6 +136,7 @@ const findDefaultCVByCandidateId = async (candidateId) => {
     LEFT JOIN industry i ON i.id = cv.id_industry
     WHERE cv.candidate_id = $1
       AND COALESCE(cv.is_default, FALSE) = TRUE
+      AND COALESCE(cv.is_deleted, FALSE) = FALSE
     ORDER BY cv.created_at DESC, cv.id DESC
     LIMIT 1
     `,
@@ -140,6 +160,7 @@ const createCV = async ({ candidateId, fileUrl, originalName, isDefault }) => {
         UPDATE cvs
         SET is_default = false
         WHERE candidate_id = $1
+          AND COALESCE(is_deleted, FALSE) = FALSE
         `,
         [candidateId],
       );
@@ -213,6 +234,8 @@ const updateCVExtraction = async ({
   expMin,
   expMax,
 }) => {
+  await ensureCVTableDefaults();
+
   const result = await pool.query(
     `
     UPDATE cvs
@@ -224,6 +247,7 @@ const updateCVExtraction = async ({
       exp_min = $7,
       exp_max = $8
     WHERE id = $1 AND candidate_id = $2
+      AND COALESCE(is_deleted, FALSE) = FALSE
     RETURNING ${selectCVFields}
     `,
     [cvId, candidateId, cvText, industryId, degree, location, expMin, expMax],
@@ -233,6 +257,8 @@ const updateCVExtraction = async ({
 };
 
 const setDefaultCV = async ({ candidateId, cvId }) => {
+  await ensureCVTableDefaults();
+
   const client = await pool.connect();
 
   try {
@@ -243,6 +269,7 @@ const setDefaultCV = async ({ candidateId, cvId }) => {
       SELECT id
       FROM cvs
       WHERE id = $1 AND candidate_id = $2
+        AND COALESCE(is_deleted, FALSE) = FALSE
       `,
       [cvId, candidateId],
     );
@@ -257,6 +284,7 @@ const setDefaultCV = async ({ candidateId, cvId }) => {
       UPDATE cvs
       SET is_default = false
       WHERE candidate_id = $1
+        AND COALESCE(is_deleted, FALSE) = FALSE
       `,
       [candidateId],
     );
@@ -266,6 +294,7 @@ const setDefaultCV = async ({ candidateId, cvId }) => {
       UPDATE cvs
       SET is_default = true
       WHERE id = $1 AND candidate_id = $2
+        AND COALESCE(is_deleted, FALSE) = FALSE
       RETURNING ${selectCVFields}
       `,
       [cvId, candidateId],
@@ -283,28 +312,73 @@ const setDefaultCV = async ({ candidateId, cvId }) => {
 };
 
 const deleteCVByIdAndCandidateId = async ({ cvId, candidateId }) => {
+  await ensureCVTableDefaults();
+
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    const deleteResult = await client.query(
+    const cvResult = await client.query(
       `
-      DELETE FROM cvs
+      SELECT ${selectCVFields}
+      FROM cvs
       WHERE id = $1 AND candidate_id = $2
-      RETURNING ${selectCVFields}
+        AND COALESCE(is_deleted, FALSE) = FALSE
+      FOR UPDATE
       `,
       [cvId, candidateId],
     );
 
-    const deletedCV = deleteResult.rows[0];
+    const cv = cvResult.rows[0];
 
-    if (!deletedCV) {
+    if (!cv) {
       await client.query("ROLLBACK");
       return null;
     }
 
-    if (deletedCV.is_default) {
+    const applicationResult = await client.query(
+      `
+      SELECT EXISTS (
+        SELECT 1
+        FROM applications
+        WHERE cv_id = $1
+        LIMIT 1
+      ) AS has_applications
+      `,
+      [cv.id],
+    );
+
+    const hasApplications = applicationResult.rows[0]?.has_applications;
+
+    const deleteResult = hasApplications
+      ? await client.query(
+          `
+          UPDATE cvs
+          SET
+            is_deleted = TRUE,
+            deleted_at = NOW(),
+            is_default = FALSE
+          WHERE id = $1 AND candidate_id = $2
+          RETURNING ${selectCVFields}
+          `,
+          [cvId, candidateId],
+        )
+      : await client.query(
+          `
+          DELETE FROM cvs
+          WHERE id = $1 AND candidate_id = $2
+          RETURNING ${selectCVFields}
+          `,
+          [cvId, candidateId],
+        );
+
+    const deletedCV = {
+      ...deleteResult.rows[0],
+      delete_type: hasApplications ? "soft" : "hard",
+    };
+
+    if (cv.is_default) {
       await client.query(
         `
         UPDATE cvs
@@ -313,6 +387,7 @@ const deleteCVByIdAndCandidateId = async ({ cvId, candidateId }) => {
           SELECT id
           FROM cvs
           WHERE candidate_id = $1
+            AND COALESCE(is_deleted, FALSE) = FALSE
           ORDER BY created_at DESC
           LIMIT 1
         )
