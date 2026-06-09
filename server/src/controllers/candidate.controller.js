@@ -5,7 +5,7 @@ const {
 } = require("../models/candidate.model");
 const { findDefaultCVByCandidateId } = require("../models/cv.model");
 const {
-  findRecommendedJobsByIdsAndIndustry,
+  findRecommendedJobsByIdsWithIndustryPriority,
 } = require("../models/job.model");
 const {
   applyJobForCandidate,
@@ -24,7 +24,7 @@ const {
   uploadFileToStorage,
 } = require("../services/storage.service");
 const {
-  recommendJobsByCVText,
+  recommendFullPosNegJobsByCVText,
   rerankRecommendedJobs,
 } = require("../services/recommend.service");
 
@@ -43,6 +43,49 @@ const removeLocalUploadedFile = async (file) => {
 
 const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
+};
+
+const buildRecommendedJobInputs = (recommendedJobs) => {
+  const seenJobIds = new Set();
+  const jobIds = [];
+  const scores = [];
+
+  recommendedJobs.forEach((job) => {
+    const jobId = job?.jobId;
+
+    if (!isValidId(jobId) || seenJobIds.has(Number(jobId))) {
+      return;
+    }
+
+    seenJobIds.add(Number(jobId));
+    jobIds.push(Number(jobId));
+    scores.push(Number.isFinite(Number(job.score)) ? Number(job.score) : null);
+  });
+
+  return {
+    jobIds,
+    scores,
+  };
+};
+
+const getRerankedRecommendedJobs = async ({
+  recommendedJobs,
+  industryId,
+  candidate,
+  cv,
+}) => {
+  const { jobIds, scores } = buildRecommendedJobInputs(recommendedJobs);
+  const jobs = await findRecommendedJobsByIdsWithIndustryPriority({
+    jobIds,
+    scores,
+    industryId,
+  });
+
+  return rerankRecommendedJobs({
+    jobs,
+    candidate,
+    cv,
+  });
 };
 
 const getMyCandidate = async (req, res) => {
@@ -281,38 +324,30 @@ const getMyRecommendedJobs = async (req, res) => {
       });
     }
 
-    const recommendedJobs = await recommendJobsByCVText({
+    const recommendationResult = await recommendFullPosNegJobsByCVText({
       cvText: defaultCV.cv_text,
+      threshold: req.query?.threshold,
     });
     console.log(
-      `Recommended ${recommendedJobs.length} jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
+      `Recommended ${recommendationResult.total} jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
     );
-    const seenJobIds = new Set();
-    const jobIds = [];
-    const scores = [];
 
-    recommendedJobs.forEach((job) => {
-      const jobId = job?.jobId;
+    const [rerankedPosJobs, rerankedNegJobs] = await Promise.all([
+      getRerankedRecommendedJobs({
+        recommendedJobs: recommendationResult.pos,
+        industryId: defaultCV.id_industry,
+        candidate,
+        cv: defaultCV,
+      }),
+      getRerankedRecommendedJobs({
+        recommendedJobs: recommendationResult.neg,
+        industryId: defaultCV.id_industry,
+        candidate,
+        cv: defaultCV,
+      }),
+    ]);
 
-      if (!isValidId(jobId) || seenJobIds.has(Number(jobId))) {
-        return;
-      }
-
-      seenJobIds.add(Number(jobId));
-      jobIds.push(Number(jobId));
-      scores.push(Number.isFinite(Number(job.score)) ? Number(job.score) : null);
-    });
-
-    const jobs = await findRecommendedJobsByIdsAndIndustry({
-      jobIds,
-      scores,
-      industryId: defaultCV.id_industry,
-    });
-    const rerankedJobs = rerankRecommendedJobs({
-      jobs,
-      candidate,
-      cv: defaultCV,
-    });
+    const allJobs = [...rerankedPosJobs, ...rerankedNegJobs];
 
     return res.status(200).json({
       success: true,
@@ -324,9 +359,15 @@ const getMyRecommendedJobs = async (req, res) => {
           industryId: defaultCV.id_industry,
           industry: defaultCV.industry,
         },
-        totalRecommended: recommendedJobs.length,
-        total: rerankedJobs.length,
-        jobs: rerankedJobs,
+        threshold: recommendationResult.threshold,
+        totalRecommended: recommendationResult.total,
+        totalPositive: rerankedPosJobs.length,
+        totalNegative: rerankedNegJobs.length,
+        total: rerankedPosJobs.length,
+        jobs: rerankedPosJobs,
+        pos: rerankedPosJobs,
+        neg: rerankedNegJobs,
+        allJobs,
       },
     });
   } catch (error) {

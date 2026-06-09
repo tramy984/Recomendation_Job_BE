@@ -877,9 +877,104 @@ const findRecommendedJobsByIdsAndIndustry = async ({
 
   return result.rows;
 };
+
+const findRecommendedJobsByIdsWithIndustryPriority = async ({
+  jobIds,
+  scores,
+  industryId,
+}) => {
+  if (!Array.isArray(jobIds) || jobIds.length === 0) {
+    return [];
+  }
+
+  const result = await pool.query(
+    `
+    WITH recommended_jobs AS (
+      SELECT DISTINCT ON (recommended.job_id)
+        recommended.job_id,
+        recommended.score,
+        recommended.rank
+      FROM unnest(
+        $1::bigint[],
+        $2::double precision[]
+      ) WITH ORDINALITY AS recommended(job_id, score, rank)
+      ORDER BY recommended.job_id, recommended.rank ASC
+    )
+    SELECT
+      recommended_jobs.rank AS recommend_rank,
+      recommended_jobs.score AS recommend_score,
+      CASE
+        WHEN $3::bigint IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM job_industry priority_ji
+            WHERE priority_ji.job_id = j.id
+              AND priority_ji.industry_id = $3::bigint
+          )
+        THEN 1
+        ELSE 0
+      END AS industry_priority,
+      j.*,
+      lt.name AS level_name,
+      jt.name AS job_type_name,
+      CASE
+        WHEN lt.id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', lt.id,
+          'name', lt.name
+        )
+      END AS level,
+      CASE
+        WHEN jt.id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', jt.id,
+          'name', jt.name
+        )
+      END AS job_type,
+      CASE
+        WHEN c.company_id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'company_id', c.company_id,
+          'name', c.name,
+          'tax_code', c.tax_code,
+          'description', c.description,
+          'location', c.location,
+          'url_website', c.url_website,
+          'url_facebook', c.url_facebook,
+          'logo', c.logo
+        )
+      END AS company,
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', i.id,
+              'name', i.name
+            )
+          )
+          FROM job_industry ji
+          INNER JOIN industry i ON i.id = ji.industry_id
+          WHERE ji.job_id = j.id
+        ),
+        '[]'::jsonb
+      ) AS industries
+    FROM recommended_jobs
+    INNER JOIN jobs j ON j.id = recommended_jobs.job_id
+    LEFT JOIN level_table lt ON lt.id = j.id_level
+    LEFT JOIN job_type jt ON jt.id = j.job_type_id
+    LEFT JOIN company c ON c.company_id = j.company_id
+    ORDER BY recommended_jobs.rank ASC
+    `,
+    [jobIds, scores, industryId || null],
+  );
+
+  return result.rows;
+};
+
 module.exports = {
   createJob,
   findRecommendedJobsByIdsAndIndustry,
+  findRecommendedJobsByIdsWithIndustryPriority,
   getApplicationById,
   getJobApplicationsByJobId,
   getJobById,
