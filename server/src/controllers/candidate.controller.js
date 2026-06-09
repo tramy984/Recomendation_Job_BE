@@ -431,22 +431,32 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
       `Recommended ${recommendationResult.total} full pos neg jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
     );
 
-    const [rerankedPosJobs, rerankedNegJobs] = await Promise.all([
-      getRerankedRecommendedJobs({
-        recommendedJobs: recommendationResult.pos,
-        industryId: defaultCV.id_industry,
-        candidate,
-        cv: defaultCV,
-      }),
-      getRerankedRecommendedJobs({
-        recommendedJobs: recommendationResult.neg,
-        industryId: defaultCV.id_industry,
-        candidate,
-        cv: defaultCV,
-      }),
-    ]);
-
-    const allJobs = [...rerankedPosJobs, ...rerankedNegJobs];
+    const recommendedJobs = [
+      ...recommendationResult.pos,
+      ...recommendationResult.neg,
+    ];
+    const allJobs = await getRerankedRecommendedJobs({
+      recommendedJobs,
+      industryId: defaultCV.id_industry,
+      candidate,
+      cv: defaultCV,
+    });
+    const positiveJobIds = new Set(
+      recommendationResult.pos
+        .map((job) => Number(job?.jobId))
+        .filter((jobId) => isValidId(jobId)),
+    );
+    const negativeJobIds = new Set(
+      recommendationResult.neg
+        .map((job) => Number(job?.jobId))
+        .filter((jobId) => isValidId(jobId)),
+    );
+    const rerankedPosJobs = allJobs.filter((job) =>
+      positiveJobIds.has(Number(job?.id)),
+    );
+    const rerankedNegJobs = allJobs.filter((job) =>
+      negativeJobIds.has(Number(job?.id)),
+    );
 
     return res.status(200).json({
       success: true,
@@ -462,8 +472,8 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
         totalRecommended: recommendationResult.total,
         totalPositive: rerankedPosJobs.length,
         totalNegative: rerankedNegJobs.length,
-        total: rerankedPosJobs.length,
-        jobs: rerankedPosJobs,
+        total: allJobs.length,
+        jobs: allJobs,
         pos: rerankedPosJobs,
         neg: rerankedNegJobs,
         allJobs,
