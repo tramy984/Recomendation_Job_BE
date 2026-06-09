@@ -81,6 +81,14 @@ const normalizeNumberFilter = (value) => {
   return Number.isFinite(number) ? number : null;
 };
 
+const normalizeSalaryFilterToVnd = (value) => {
+  const number = normalizeNumberFilter(value);
+
+  if (number === null) return null;
+
+  return Math.abs(number) >= 1000000 ? number : number * 1000000;
+};
+
 const readQueryAlias = (query, keys) => {
   const key = keys.find((item) => query[item] !== undefined);
 
@@ -194,8 +202,22 @@ const matchesSalaryFilter = (job, salaryFilter) => {
   const normalizedFilter = normalizeFilterText(salaryFilter)
     .replace(/\s+/g, "_")
     .replace(/-/g, "_");
+  const salaryNumbers = normalizedFilter
+    .match(/\d+(?:\.\d+)?/g)
+    ?.map(Number)
+    .filter(Number.isFinite);
 
   if (!normalizedFilter || isAllFilterValue(salaryFilter)) return true;
+
+  if (salaryNumbers?.length >= 2) {
+    return matchesSalaryRange({
+      job,
+      salaryMin:
+        Math.min(salaryNumbers[0], salaryNumbers[1]) * 1000000,
+      salaryMax:
+        Math.max(salaryNumbers[0], salaryNumbers[1]) * 1000000,
+    });
+  }
 
   if (
     [
@@ -402,14 +424,16 @@ const getRecommendedJobFilters = (query = {}) => {
     expMax: normalizeNumberFilter(readQueryAlias(query, ["expMax", "exp_max"])),
     salary: readQueryAlias(query, [
       "salary",
+      "salaryRange",
+      "salary_range",
       "salaryFilter",
       "salary_filter",
       "wage",
     ]),
-    salaryMin: normalizeNumberFilter(
+    salaryMin: normalizeSalaryFilterToVnd(
       readQueryAlias(query, ["salaryMin", "salary_min"]),
     ),
-    salaryMax: normalizeNumberFilter(
+    salaryMax: normalizeSalaryFilterToVnd(
       readQueryAlias(query, ["salaryMax", "salary_max"]),
     ),
   };
