@@ -192,8 +192,8 @@ const matchesSalaryRange = ({ job, salaryMin, salaryMax }) => {
   const jobMin = jobSalary.salaryMin ?? jobSalary.salaryMax;
   const jobMax = jobSalary.salaryMax ?? jobSalary.salaryMin;
 
-  if (salaryMin !== null && jobMax < salaryMin) return false;
-  if (salaryMax !== null && jobMin > salaryMax) return false;
+  if (salaryMin !== null && jobMin < salaryMin) return false;
+  if (salaryMax !== null && jobMax > salaryMax) return false;
 
   return true;
 };
