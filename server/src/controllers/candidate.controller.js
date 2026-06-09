@@ -47,6 +47,332 @@ const isValidId = (value) => {
   return /^\d+$/.test(String(value || ""));
 };
 
+const DEFAULT_RECOMMEND_PAGE = 1;
+const DEFAULT_RECOMMEND_LIMIT = 10;
+const MAX_RECOMMEND_LIMIT = 100;
+
+const parsePositiveInteger = (value, defaultValue) => {
+  const parsedValue = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    return defaultValue;
+  }
+
+  return parsedValue;
+};
+
+const normalizeFilterText = (value) => {
+  if (value === undefined || value === null) return "";
+
+  return String(value)
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase();
+};
+
+const normalizeNumberFilter = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : null;
+};
+
+const readQueryAlias = (query, keys) => {
+  const key = keys.find((item) => query[item] !== undefined);
+
+  return key ? query[key] : undefined;
+};
+
+const isAllFilterValue = (value) => {
+  return ["all", "tat ca", "tat_ca", "tatca"].includes(
+    normalizeFilterText(value),
+  );
+};
+
+const getRecommendedJobIndustryIds = (job) => {
+  const industryIds = [];
+
+  if (Array.isArray(job?.industries)) {
+    job.industries.forEach((industry) => {
+      const industryId =
+        typeof industry === "object" ? industry?.id : industry;
+
+      if (isValidId(industryId)) {
+        industryIds.push(Number(industryId));
+      }
+    });
+  }
+
+  const directIndustryId =
+    job?.industry_id ?? job?.industryId ?? job?.industry?.id;
+
+  if (isValidId(directIndustryId)) {
+    industryIds.push(Number(directIndustryId));
+  }
+
+  return [...new Set(industryIds)];
+};
+
+const getRecommendedJobIndustryText = (job) => {
+  const industryNames = Array.isArray(job?.industries)
+    ? job.industries
+        .map((industry) =>
+          typeof industry === "object" ? industry?.name : industry,
+        )
+        .filter(Boolean)
+    : [];
+
+  return normalizeFilterText(
+    [
+      ...industryNames,
+      job?.industry?.name,
+      job?.industry,
+      job?.industry_name,
+      job?.industryName,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+};
+
+const getRecommendedJobTypeId = (job) => {
+  const jobTypeId = job?.job_type_id ?? job?.jobTypeId ?? job?.job_type?.id;
+
+  return isValidId(jobTypeId) ? Number(jobTypeId) : null;
+};
+
+const getRecommendedJobTypeText = (job) => {
+  return normalizeFilterText(
+    [job?.job_type?.name, job?.jobType?.name, job?.job_type_name]
+      .filter(Boolean)
+      .join(" "),
+  );
+};
+
+const getRecommendedJobExperienceRange = (job) => {
+  const expMin = normalizeNumberFilter(job?.exp_min ?? job?.expMin) ?? 0;
+  const expMax =
+    normalizeNumberFilter(job?.exp_max ?? job?.expMax) ?? expMin;
+
+  return {
+    expMin,
+    expMax,
+  };
+};
+
+const matchesExperienceRange = ({ job, expMin, expMax }) => {
+  const jobExperience = getRecommendedJobExperienceRange(job);
+
+  if (expMin !== null && jobExperience.expMax < expMin) return false;
+  if (expMax !== null && jobExperience.expMin > expMax) return false;
+
+  return true;
+};
+
+const matchesExperienceFilter = (job, experienceFilter) => {
+  const normalizedFilter = normalizeFilterText(experienceFilter).replace(
+    /\s+/g,
+    "_",
+  );
+  const { expMin, expMax } = getRecommendedJobExperienceRange(job);
+
+  if (!normalizedFilter || normalizedFilter === "all") return true;
+
+  if (
+    [
+      "none",
+      "no",
+      "no_required",
+      "no_require",
+      "khong_yeu_cau",
+      "khongyeucau",
+      "0",
+    ].includes(normalizedFilter)
+  ) {
+    return expMin <= 0 && expMax <= 0;
+  }
+
+  if (
+    [
+      "under_1",
+      "duoi_1",
+      "duoi_1_nam",
+      "less_than_1",
+      "lt_1",
+    ].includes(normalizedFilter)
+  ) {
+    return expMax > 0 && matchesExperienceRange({ job, expMin: 0, expMax: 1 });
+  }
+
+  if (["1_3", "1-3", "from_1_to_3"].includes(normalizedFilter)) {
+    return matchesExperienceRange({ job, expMin: 1, expMax: 3 });
+  }
+
+  if (["3_5", "3-5", "from_3_to_5"].includes(normalizedFilter)) {
+    return matchesExperienceRange({ job, expMin: 3, expMax: 5 });
+  }
+
+  if (
+    [
+      "over_5",
+      "tren_5",
+      "tren_5_nam",
+      "greater_than_5",
+      "gt_5",
+    ].includes(normalizedFilter)
+  ) {
+    return expMax > 5;
+  }
+
+  return true;
+};
+
+const getRecommendedJobFilters = (query = {}) => {
+  const page = parsePositiveInteger(
+    readQueryAlias(query, ["page"]),
+    DEFAULT_RECOMMEND_PAGE,
+  );
+  const requestedLimit = parsePositiveInteger(
+    readQueryAlias(query, ["limit", "pageSize", "page_size"]),
+    DEFAULT_RECOMMEND_LIMIT,
+  );
+  const limit = Math.min(requestedLimit, MAX_RECOMMEND_LIMIT);
+  const keyword = normalizeFilterText(
+    readQueryAlias(query, ["keyword", "q", "search", "name"]),
+  );
+  const industry = readQueryAlias(query, [
+    "industryId",
+    "industry_id",
+    "categoryId",
+    "category_id",
+    "category",
+    "industry",
+  ]);
+  const jobType = readQueryAlias(query, [
+    "jobTypeId",
+    "job_type_id",
+    "jobType",
+    "job_type",
+    "workType",
+    "work_type",
+  ]);
+
+  const industryText = isAllFilterValue(industry)
+    ? ""
+    : normalizeFilterText(industry);
+  const jobTypeText = isAllFilterValue(jobType)
+    ? ""
+    : normalizeFilterText(jobType);
+
+  return {
+    page,
+    limit,
+    keyword,
+    industryId:
+      !isAllFilterValue(industry) && isValidId(industry)
+        ? Number(industry)
+        : null,
+    industryText: isValidId(industry) ? "" : industryText,
+    jobTypeId:
+      !isAllFilterValue(jobType) && isValidId(jobType)
+        ? Number(jobType)
+        : null,
+    jobTypeText: isValidId(jobType) ? "" : jobTypeText,
+    experience: readQueryAlias(query, [
+      "experience",
+      "experienceFilter",
+      "exp",
+      "expFilter",
+    ]),
+    expMin: normalizeNumberFilter(readQueryAlias(query, ["expMin", "exp_min"])),
+    expMax: normalizeNumberFilter(readQueryAlias(query, ["expMax", "exp_max"])),
+  };
+};
+
+const filterRecommendedJobs = (jobs, filters) => {
+  return jobs.filter((job) => {
+    if (filters.keyword) {
+      const searchableText = normalizeFilterText(
+        [
+          job?.name,
+          job?.title,
+          job?.location,
+          job?.company?.name,
+          job?.company_name,
+          job?.companyName,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+
+      if (!searchableText.includes(filters.keyword)) return false;
+    }
+
+    if (filters.industryId !== null) {
+      const industryIds = getRecommendedJobIndustryIds(job);
+
+      if (!industryIds.includes(filters.industryId)) return false;
+    }
+
+    if (filters.industryText) {
+      const industryText = getRecommendedJobIndustryText(job);
+
+      if (!industryText.includes(filters.industryText)) return false;
+    }
+
+    if (filters.jobTypeId !== null) {
+      const jobTypeId = getRecommendedJobTypeId(job);
+
+      if (jobTypeId !== filters.jobTypeId) return false;
+    }
+
+    if (filters.jobTypeText) {
+      const jobTypeText = getRecommendedJobTypeText(job);
+
+      if (!jobTypeText.includes(filters.jobTypeText)) return false;
+    }
+
+    if (!matchesExperienceFilter(job, filters.experience)) return false;
+
+    if (
+      filters.expMin !== null &&
+      !matchesExperienceRange({ job, expMin: filters.expMin, expMax: null })
+    ) {
+      return false;
+    }
+
+    if (
+      filters.expMax !== null &&
+      !matchesExperienceRange({ job, expMin: null, expMax: filters.expMax })
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
+const paginateRecommendedJobs = ({ jobs, page, limit }) => {
+  const total = jobs.length;
+  const totalPages = Math.ceil(total / limit);
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : page;
+  const offset = (safePage - 1) * limit;
+
+  return {
+    pageJobs: jobs.slice(offset, offset + limit),
+    pagination: {
+      page: safePage,
+      limit,
+      total,
+      totalPages,
+    },
+  };
+};
+
 const buildRecommendedJobInputs = (recommendedJobs) => {
   const seenJobIds = new Set();
   const jobIds = [];
@@ -457,6 +783,25 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
     const rerankedNegJobs = allJobs.filter((job) =>
       negativeJobIds.has(Number(job?.id)),
     );
+    const filters = getRecommendedJobFilters(req.query);
+    const filteredJobs = filterRecommendedJobs(allJobs, filters);
+    const filteredPosJobs = filteredJobs.filter((job) =>
+      positiveJobIds.has(Number(job?.id)),
+    );
+    const filteredNegJobs = filteredJobs.filter((job) =>
+      negativeJobIds.has(Number(job?.id)),
+    );
+    const { pageJobs, pagination } = paginateRecommendedJobs({
+      jobs: filteredJobs,
+      page: filters.page,
+      limit: filters.limit,
+    });
+    const pagePosJobs = pageJobs.filter((job) =>
+      positiveJobIds.has(Number(job?.id)),
+    );
+    const pageNegJobs = pageJobs.filter((job) =>
+      negativeJobIds.has(Number(job?.id)),
+    );
 
     return res.status(200).json({
       success: true,
@@ -470,13 +815,27 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
         },
         threshold: recommendationResult.threshold,
         totalRecommended: recommendationResult.total,
-        totalPositive: rerankedPosJobs.length,
-        totalNegative: rerankedNegJobs.length,
-        total: allJobs.length,
-        jobs: allJobs,
-        pos: rerankedPosJobs,
-        neg: rerankedNegJobs,
-        allJobs,
+        totalBeforeFilter: allJobs.length,
+        totalPositiveBeforeFilter: rerankedPosJobs.length,
+        totalNegativeBeforeFilter: rerankedNegJobs.length,
+        totalPositive: filteredPosJobs.length,
+        totalNegative: filteredNegJobs.length,
+        total: filteredJobs.length,
+        filters: {
+          keyword: filters.keyword || null,
+          industryId: filters.industryId,
+          industry: filters.industryText || null,
+          jobTypeId: filters.jobTypeId,
+          jobType: filters.jobTypeText || null,
+          experience: filters.experience || null,
+          expMin: filters.expMin,
+          expMax: filters.expMax,
+        },
+        pagination,
+        jobs: pageJobs,
+        pos: pagePosJobs,
+        neg: pageNegJobs,
+        allJobs: pageJobs,
       },
     });
   } catch (error) {
