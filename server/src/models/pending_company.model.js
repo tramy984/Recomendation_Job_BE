@@ -124,6 +124,39 @@ const getPendingCompaniesByRecruiterId = async (recruiterId) => {
   return result.rows;
 };
 
+const getPendingCompanyByCompanyIdAndRecruiterId = async ({
+  companyId,
+  recruiterId,
+  status = "pending",
+}) => {
+  if (!companyId || !recruiterId) return null;
+
+  const result = await pool.query(
+    `
+    ${PENDING_COMPANY_FIELDS}
+    FROM pending_companies pc
+    INNER JOIN recruiter r
+      ON r.id = pc.recruiter_id
+    LEFT JOIN users u
+      ON u.id = r.user_id
+    LEFT JOIN pending_company_industries pci
+      ON pci.pending_company_id = pc.id
+    LEFT JOIN industry i
+      ON i.id = pci.industry_id
+    WHERE pc.company_id = $1
+      AND pc.recruiter_id = $2
+      AND pc.request_type = 'update'
+      AND pc.status = $3
+    ${PENDING_COMPANY_GROUP_BY}
+    ORDER BY pc.created_at DESC, pc.id DESC
+    LIMIT 1
+    `,
+    [companyId, recruiterId, status]
+  );
+
+  return result.rows[0] || null;
+};
+
 const getPendingCompaniesByStatus = async (status = "pending") => {
   const result = await pool.query(
     `
@@ -710,6 +743,7 @@ module.exports = {
   approvePendingCompany,
   createPendingCompany,
   getAllPendingCompanies,
+  getPendingCompanyByCompanyIdAndRecruiterId,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
   getPendingCompaniesByStatus,
