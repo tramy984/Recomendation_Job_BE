@@ -268,9 +268,8 @@ const getExperiencePenalty = ({ candidateExperience, requiredExperience }) => {
   const requiredYears = normalizeNumber(requiredExperience);
 
   if (candidateYears === null || requiredYears === null) return 0;
-  if (candidateYears >= requiredYears) return 0;
 
-  const gap = requiredYears - candidateYears;
+  const gap = Math.abs(requiredYears - candidateYears);
 
   if (gap >= 5) return -0.5;
   if (gap >= 3) return -0.3;
@@ -330,9 +329,8 @@ const getEducationPenalty = ({ candidateDegree, job }) => {
   const requiredRank = getJobRequiredEducationRank(job);
 
   if (candidateRank === null || requiredRank === null) return 0;
-  if (candidateRank >= requiredRank) return 0;
 
-  const gap = requiredRank - candidateRank;
+  const gap = Math.abs(requiredRank - candidateRank);
 
   if (gap >= 3) return -0.4;
   if (gap >= 2) return -0.25;
