@@ -24,6 +24,8 @@ router.get("/saved-jobs", verifyToken, getMySavedJobs);
 
 router.get("/recommended-jobs", verifyToken, getMyRecommendedJobs);
 
+router.get("/recommended-jobs/full-pos-neg", verifyToken, getMyRecommendedJobs);
+
 router.get("/applications", verifyToken, getMyApplications);
 
 router.get("/:candidateId", verifyToken, getCandidateDetail);
