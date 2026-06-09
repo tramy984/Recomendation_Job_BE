@@ -231,6 +231,8 @@ CREATE TABLE cvs (
     location VARCHAR(255),
     exp_min INTEGER,
     exp_max INTEGER,
+    deleted_at TIMESTAMP,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT fk_cvs_candidate
         FOREIGN KEY (candidate_id)
         REFERENCES candidate_profile(id)

@@ -20,6 +20,12 @@ const ensureApplicationTableDefaults = () => {
     tableReadyPromise = pool.query(`
       ALTER TABLE applications
         ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+      ALTER TABLE cvs
+        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+
+      ALTER TABLE cvs
+        ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
     `);
   }
 
@@ -128,6 +134,7 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
           FROM cvs
           WHERE id = $1
             AND candidate_id = $2
+            AND COALESCE(is_deleted, FALSE) = FALSE
           `
         : `
           SELECT
@@ -137,6 +144,7 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
             exp_max
           FROM cvs
           WHERE candidate_id = $1
+            AND COALESCE(is_deleted, FALSE) = FALSE
           ORDER BY is_default DESC, created_at DESC, id DESC
           LIMIT 1
           `,
