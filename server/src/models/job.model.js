@@ -270,6 +270,11 @@ const getJobApplicationsByJobId = async (jobId) => {
       a.candidate_id,
       a.cv_id,
       a.status,
+      a.matching_score,
+      CASE
+        WHEN a.matching_score IS NULL THEN NULL
+        ELSE ROUND((a.matching_score::numeric * 100), 2)::float
+      END AS matching_percent,
       a.created_at,
       a.approved_at,
       a.reason_reject,
@@ -304,7 +309,7 @@ const getJobApplicationsByJobId = async (jobId) => {
     LEFT JOIN users u ON u.id = cp.user_id
     LEFT JOIN cvs cv ON cv.id = a.cv_id
     WHERE a.job_id = $1
-    ORDER BY a.created_at DESC, a.id DESC
+    ORDER BY a.matching_score DESC NULLS LAST, a.created_at DESC, a.id DESC
     `,
     [jobId],
   );

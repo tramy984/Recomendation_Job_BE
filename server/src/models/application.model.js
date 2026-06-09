@@ -1,6 +1,19 @@
 const pool = require("../config/db");
+const { extractJobInfo } = require("../services/extractJobSkill");
+const {
+  calculateMatchingScore,
+} = require("../services/matchingScore.service");
 
 let tableReadyPromise = null;
+
+const extractSkillsFromCvText = (cvText = "") => {
+  const skillsText = String(cvText).split(/Skills:/i)[1] || "";
+
+  return skillsText
+    .split(",")
+    .map((skill) => skill.toLowerCase().trim().replace(/\.+$/, ""))
+    .filter(Boolean);
+};
 
 const ensureApplicationTableDefaults = () => {
   if (!tableReadyPromise) {
@@ -76,7 +89,12 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
       SELECT
         id,
         status,
-        expire
+        expire,
+        name,
+        description,
+        job_requirement,
+        exp_min,
+        exp_max
       FROM jobs
       WHERE id = $1
       FOR UPDATE
@@ -102,13 +120,21 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
     const cvResult = await client.query(
       cvId
         ? `
-          SELECT id
+          SELECT
+            id,
+            cv_text,
+            degree,
+            exp_max
           FROM cvs
           WHERE id = $1
             AND candidate_id = $2
           `
         : `
-          SELECT id
+          SELECT
+            id,
+            cv_text,
+            degree,
+            exp_max
           FROM cvs
           WHERE candidate_id = $1
           ORDER BY is_default DESC, created_at DESC, id DESC
@@ -152,19 +178,44 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
       };
     }
 
+    const cvSkills = extractSkillsFromCvText(cv.cv_text);
+    const jobText = [job.name, job.description, job.job_requirement]
+      .filter(Boolean)
+      .join(" ");
+    const jobInfo = extractJobInfo(jobText);
+
+    const jobSkills = jobInfo.skills;
+    const jobDegree = jobInfo.degree;
+
+    const matchingResult = calculateMatchingScore({
+      cvSkills,
+      jobSkills,
+      cvDegree: cv.degree,
+      jobDegree,
+      cvExpMax: cv.exp_max,
+      jobExpMin: job.exp_min,
+      jobExpMax: job.exp_max,
+    });
+
+    console.log("CV Skills:", cvSkills);
+    console.log("Job Skills:", jobSkills);
+    console.log("Matched:", matchingResult.matchedSkills);
+    console.log("Score:", matchingResult.score);
+
     const applicationResult = await client.query(
       `
   INSERT INTO applications (
     candidate_id,
     cv_id,
     job_id,
+    matching_score,
     status,
     created_at
   )
-  VALUES ($1, $2, $3, $4, NOW())
+  VALUES ($1, $2, $3, $4, $5, NOW())
   RETURNING id
   `,
-      [candidateId, cv.id, jobId, "pending"],
+      [candidateId, cv.id, jobId, matchingResult.score, "pending"],
     );
 
     await client.query(
