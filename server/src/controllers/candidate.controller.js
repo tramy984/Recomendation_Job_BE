@@ -164,6 +164,104 @@ const getRecommendedJobExperienceRange = (job) => {
   };
 };
 
+const getRecommendedJobSalaryRange = (job) => {
+  const salaryMin = normalizeNumberFilter(job?.salary_min ?? job?.salaryMin);
+  const salaryMax = normalizeNumberFilter(job?.salary_max ?? job?.salaryMax);
+
+  return {
+    salaryMin,
+    salaryMax,
+  };
+};
+
+const matchesSalaryRange = ({ job, salaryMin, salaryMax }) => {
+  const jobSalary = getRecommendedJobSalaryRange(job);
+
+  if (jobSalary.salaryMin === null && jobSalary.salaryMax === null) {
+    return false;
+  }
+
+  const jobMin = jobSalary.salaryMin ?? jobSalary.salaryMax;
+  const jobMax = jobSalary.salaryMax ?? jobSalary.salaryMin;
+
+  if (salaryMin !== null && jobMax < salaryMin) return false;
+  if (salaryMax !== null && jobMin > salaryMax) return false;
+
+  return true;
+};
+
+const matchesSalaryFilter = (job, salaryFilter) => {
+  const normalizedFilter = normalizeFilterText(salaryFilter)
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  if (!normalizedFilter || isAllFilterValue(salaryFilter)) return true;
+
+  if (
+    [
+      "under_10",
+      "duoi_10",
+      "duoi_10_trieu",
+      "less_than_10",
+      "lt_10",
+    ].includes(normalizedFilter)
+  ) {
+    return matchesSalaryRange({ job, salaryMin: null, salaryMax: 10000000 });
+  }
+
+  if (["10_15", "from_10_to_15"].includes(normalizedFilter)) {
+    return matchesSalaryRange({
+      job,
+      salaryMin: 10000000,
+      salaryMax: 15000000,
+    });
+  }
+
+  if (["15_20", "from_15_to_20"].includes(normalizedFilter)) {
+    return matchesSalaryRange({
+      job,
+      salaryMin: 15000000,
+      salaryMax: 20000000,
+    });
+  }
+
+  if (["20_30", "from_20_to_30"].includes(normalizedFilter)) {
+    return matchesSalaryRange({
+      job,
+      salaryMin: 20000000,
+      salaryMax: 30000000,
+    });
+  }
+
+  if (
+    [
+      "over_30",
+      "tren_30",
+      "tren_30_trieu",
+      "greater_than_30",
+      "gt_30",
+    ].includes(normalizedFilter)
+  ) {
+    return matchesSalaryRange({ job, salaryMin: 30000000, salaryMax: null });
+  }
+
+  return true;
+};
+
+const getRecommendedJobLevelId = (job) => {
+  const levelId = job?.id_level ?? job?.level_id ?? job?.levelId ?? job?.level?.id;
+
+  return isValidId(levelId) ? Number(levelId) : null;
+};
+
+const getRecommendedJobLevelText = (job) => {
+  return normalizeFilterText(
+    [job?.level?.name, job?.level_name, job?.levelName]
+      .filter(Boolean)
+      .join(" "),
+  );
+};
+
 const matchesExperienceRange = ({ job, expMin, expMax }) => {
   const jobExperience = getRecommendedJobExperienceRange(job);
 
@@ -260,6 +358,14 @@ const getRecommendedJobFilters = (query = {}) => {
     "workType",
     "work_type",
   ]);
+  const level = readQueryAlias(query, [
+    "levelId",
+    "level_id",
+    "level",
+    "rank",
+    "positionLevel",
+    "position_level",
+  ]);
 
   const industryText = isAllFilterValue(industry)
     ? ""
@@ -267,6 +373,7 @@ const getRecommendedJobFilters = (query = {}) => {
   const jobTypeText = isAllFilterValue(jobType)
     ? ""
     : normalizeFilterText(jobType);
+  const levelText = isAllFilterValue(level) ? "" : normalizeFilterText(level);
 
   return {
     page,
@@ -282,6 +389,9 @@ const getRecommendedJobFilters = (query = {}) => {
         ? Number(jobType)
         : null,
     jobTypeText: isValidId(jobType) ? "" : jobTypeText,
+    levelId:
+      !isAllFilterValue(level) && isValidId(level) ? Number(level) : null,
+    levelText: isValidId(level) ? "" : levelText,
     experience: readQueryAlias(query, [
       "experience",
       "experienceFilter",
@@ -290,6 +400,18 @@ const getRecommendedJobFilters = (query = {}) => {
     ]),
     expMin: normalizeNumberFilter(readQueryAlias(query, ["expMin", "exp_min"])),
     expMax: normalizeNumberFilter(readQueryAlias(query, ["expMax", "exp_max"])),
+    salary: readQueryAlias(query, [
+      "salary",
+      "salaryFilter",
+      "salary_filter",
+      "wage",
+    ]),
+    salaryMin: normalizeNumberFilter(
+      readQueryAlias(query, ["salaryMin", "salary_min"]),
+    ),
+    salaryMax: normalizeNumberFilter(
+      readQueryAlias(query, ["salaryMax", "salary_max"]),
+    ),
   };
 };
 
@@ -336,6 +458,18 @@ const filterRecommendedJobs = (jobs, filters) => {
       if (!jobTypeText.includes(filters.jobTypeText)) return false;
     }
 
+    if (filters.levelId !== null) {
+      const levelId = getRecommendedJobLevelId(job);
+
+      if (levelId !== filters.levelId) return false;
+    }
+
+    if (filters.levelText) {
+      const levelText = getRecommendedJobLevelText(job);
+
+      if (!levelText.includes(filters.levelText)) return false;
+    }
+
     if (!matchesExperienceFilter(job, filters.experience)) return false;
 
     if (
@@ -348,6 +482,30 @@ const filterRecommendedJobs = (jobs, filters) => {
     if (
       filters.expMax !== null &&
       !matchesExperienceRange({ job, expMin: null, expMax: filters.expMax })
+    ) {
+      return false;
+    }
+
+    if (!matchesSalaryFilter(job, filters.salary)) return false;
+
+    if (
+      filters.salaryMin !== null &&
+      !matchesSalaryRange({
+        job,
+        salaryMin: filters.salaryMin,
+        salaryMax: null,
+      })
+    ) {
+      return false;
+    }
+
+    if (
+      filters.salaryMax !== null &&
+      !matchesSalaryRange({
+        job,
+        salaryMin: null,
+        salaryMax: filters.salaryMax,
+      })
     ) {
       return false;
     }
@@ -827,9 +985,14 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
           industry: filters.industryText || null,
           jobTypeId: filters.jobTypeId,
           jobType: filters.jobTypeText || null,
+          levelId: filters.levelId,
+          level: filters.levelText || null,
           experience: filters.experience || null,
           expMin: filters.expMin,
           expMax: filters.expMax,
+          salary: filters.salary || null,
+          salaryMin: filters.salaryMin,
+          salaryMax: filters.salaryMax,
         },
         pagination,
         jobs: pageJobs,
