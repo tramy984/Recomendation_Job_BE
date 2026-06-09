@@ -5,6 +5,7 @@ const {
 } = require("../models/candidate.model");
 const { findDefaultCVByCandidateId } = require("../models/cv.model");
 const {
+  findRecommendedJobsByIdsAndIndustry,
   findRecommendedJobsByIdsWithIndustryPriority,
 } = require("../models/job.model");
 const {
@@ -25,6 +26,7 @@ const {
 } = require("../services/storage.service");
 const {
   recommendFullPosNegJobsByCVText,
+  recommendJobsByCVText,
   rerankRecommendedJobs,
 } = require("../services/recommend.service");
 
@@ -324,12 +326,109 @@ const getMyRecommendedJobs = async (req, res) => {
       });
     }
 
+    const recommendedJobs = await recommendJobsByCVText({
+      cvText: defaultCV.cv_text,
+    });
+    console.log(
+      `Recommended ${recommendedJobs.length} jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
+    );
+    const { jobIds, scores } = buildRecommendedJobInputs(recommendedJobs);
+
+    const jobs = await findRecommendedJobsByIdsAndIndustry({
+      jobIds,
+      scores,
+      industryId: defaultCV.id_industry,
+    });
+    const rerankedJobs = rerankRecommendedJobs({
+      jobs,
+      candidate,
+      cv: defaultCV,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Lấy danh sách việc làm gợi ý thành công.",
+      data: {
+        candidateId: candidate.id,
+        cv: {
+          id: defaultCV.id,
+          industryId: defaultCV.id_industry,
+          industry: defaultCV.industry,
+        },
+        totalRecommended: recommendedJobs.length,
+        total: rerankedJobs.length,
+        jobs: rerankedJobs,
+      },
+    });
+  } catch (error) {
+    console.log("GET MY RECOMMENDED JOBS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server.",
+      error: error.message,
+    });
+  }
+};
+
+const getMyRecommendedJobsFullPosNeg = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Bạn chưa đăng nhập.",
+      });
+    }
+
+    if (role !== "candidate") {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ ứng viên mới có quyền xem việc làm gợi ý.",
+      });
+    }
+
+    const candidate = await findCandidateByUserId(userId);
+
+    if (!candidate) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy candidate.",
+      });
+    }
+
+    const defaultCV = await findDefaultCVByCandidateId(candidate.id);
+
+    if (!defaultCV) {
+      return res.status(404).json({
+        success: false,
+        message: "Bạn chưa có CV mặc định.",
+      });
+    }
+
+    if (!defaultCV.cv_text) {
+      return res.status(400).json({
+        success: false,
+        message: "CV mặc định chưa có nội dung để gợi ý việc làm.",
+      });
+    }
+
+    if (!defaultCV.id_industry) {
+      return res.status(400).json({
+        success: false,
+        message: "CV mặc định chưa có ngành nghề để lọc việc làm phù hợp.",
+      });
+    }
+
     const recommendationResult = await recommendFullPosNegJobsByCVText({
       cvText: defaultCV.cv_text,
       threshold: req.query?.threshold,
     });
+
     console.log(
-      `Recommended ${recommendationResult.total} jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
+      `Recommended ${recommendationResult.total} full pos neg jobs for candidate ${candidate.id} with CV ${defaultCV.id}`,
     );
 
     const [rerankedPosJobs, rerankedNegJobs] = await Promise.all([
@@ -351,7 +450,7 @@ const getMyRecommendedJobs = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Lấy danh sách việc làm gợi ý thành công.",
+      message: "Lấy danh sách việc làm gợi ý pos/neg thành công.",
       data: {
         candidateId: candidate.id,
         cv: {
@@ -371,7 +470,7 @@ const getMyRecommendedJobs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log("GET MY RECOMMENDED JOBS ERROR:", error);
+    console.log("GET MY RECOMMENDED JOBS FULL POS NEG ERROR:", error);
 
     return res.status(500).json({
       success: false,
@@ -672,6 +771,7 @@ module.exports = {
   getCandidateDetail,
   getMyApplications,
   getMyCandidate,
+  getMyRecommendedJobsFullPosNeg,
   getMyRecommendedJobs,
   getMySavedJobs,
   saveMyJob,
