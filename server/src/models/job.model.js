@@ -870,6 +870,8 @@ const findRecommendedJobsByIdsAndIndustry = async ({
     LEFT JOIN level_table lt ON lt.id = j.id_level
     LEFT JOIN job_type jt ON jt.id = j.job_type_id
     LEFT JOIN company c ON c.company_id = j.company_id
+    WHERE j.status = 1
+      AND (j.expire IS NULL OR j.expire > CURRENT_TIMESTAMP)
     ORDER BY recommended_jobs.rank ASC
     `,
     [jobIds, scores, industryId],
@@ -963,6 +965,8 @@ const findRecommendedJobsByIdsWithIndustryPriority = async ({
     LEFT JOIN level_table lt ON lt.id = j.id_level
     LEFT JOIN job_type jt ON jt.id = j.job_type_id
     LEFT JOIN company c ON c.company_id = j.company_id
+    WHERE j.status = 1
+      AND (j.expire IS NULL OR j.expire > CURRENT_TIMESTAMP)
     ORDER BY recommended_jobs.rank ASC
     `,
     [jobIds, scores, industryId || null],
