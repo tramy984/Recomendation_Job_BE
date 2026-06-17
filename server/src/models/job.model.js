@@ -793,6 +793,66 @@ const getJobsWithPagination = async ({
   };
 };
 
+const findAllRecommendableJobs = async () => {
+  const result = await pool.query(
+    `
+    SELECT
+      j.*,
+      lt.name AS level_name,
+      jt.name AS job_type_name,
+      CASE
+        WHEN lt.id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', lt.id,
+          'name', lt.name
+        )
+      END AS level,
+      CASE
+        WHEN jt.id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', jt.id,
+          'name', jt.name
+        )
+      END AS job_type,
+      CASE
+        WHEN c.company_id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'company_id', c.company_id,
+          'name', c.name,
+          'tax_code', c.tax_code,
+          'description', c.description,
+          'location', c.location,
+          'url_website', c.url_website,
+          'url_facebook', c.url_facebook,
+          'logo', c.logo
+        )
+      END AS company,
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', i.id,
+              'name', i.name
+            )
+          )
+          FROM job_industry ji
+          INNER JOIN industry i ON i.id = ji.industry_id
+          WHERE ji.job_id = j.id
+        ),
+        '[]'::jsonb
+      ) AS industries
+    FROM jobs j
+    LEFT JOIN level_table lt ON lt.id = j.id_level
+    LEFT JOIN job_type jt ON jt.id = j.job_type_id
+    LEFT JOIN company c ON c.company_id = j.company_id
+    WHERE j.status = 1
+      AND (j.expire IS NULL OR j.expire > CURRENT_TIMESTAMP)
+    `,
+  );
+
+  return result.rows;
+};
+
 const findRecommendedJobsByIdsAndIndustry = async ({
   jobIds,
   scores,
@@ -977,6 +1037,7 @@ const findRecommendedJobsByIdsWithIndustryPriority = async ({
 
 module.exports = {
   createJob,
+  findAllRecommendableJobs,
   findRecommendedJobsByIdsAndIndustry,
   findRecommendedJobsByIdsWithIndustryPriority,
   getApplicationById,

@@ -5,6 +5,7 @@ const {
 } = require("../models/candidate.model");
 const { findDefaultCVByCandidateId } = require("../models/cv.model");
 const {
+  findAllRecommendableJobs,
   findRecommendedJobsByIdsAndIndustry,
   findRecommendedJobsByIdsWithIndustryPriority,
 } = require("../models/job.model");
@@ -910,9 +911,50 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
     const defaultCV = await findDefaultCVByCandidateId(candidate.id);
 
     if (!defaultCV) {
-      return res.status(404).json({
-        success: false,
-        message: "Bạn chưa có CV mặc định.",
+      const allJobs = await findAllRecommendableJobs();
+      const filters = getRecommendedJobFilters(req.query);
+      const filteredJobs = filterRecommendedJobs(allJobs, filters);
+      const { pageJobs, pagination } = paginateRecommendedJobs({
+        jobs: filteredJobs,
+        page: filters.page,
+        limit: filters.limit,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Lấy danh sách việc làm thành công.",
+        data: {
+          candidateId: candidate.id,
+          cv: null,
+          threshold: null,
+          totalRecommended: allJobs.length,
+          totalBeforeFilter: allJobs.length,
+          totalPositiveBeforeFilter: 0,
+          totalNegativeBeforeFilter: 0,
+          totalPositive: 0,
+          totalNegative: 0,
+          total: filteredJobs.length,
+          filters: {
+            keyword: filters.keyword || null,
+            industryId: filters.industryId,
+            industry: filters.industryText || null,
+            jobTypeId: filters.jobTypeId,
+            jobType: filters.jobTypeText || null,
+            levelId: filters.levelId,
+            level: filters.levelText || null,
+            experience: filters.experience || null,
+            expMin: filters.expMin,
+            expMax: filters.expMax,
+            salary: filters.salary || null,
+            salaryMin: filters.salaryMin,
+            salaryMax: filters.salaryMax,
+          },
+          pagination,
+          jobs: pageJobs,
+          pos: [],
+          neg: [],
+          allJobs: pageJobs,
+        },
       });
     }
 
@@ -920,13 +962,6 @@ const getMyRecommendedJobsFullPosNeg = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "CV mặc định chưa có nội dung để gợi ý việc làm.",
-      });
-    }
-
-    if (!defaultCV.id_industry) {
-      return res.status(400).json({
-        success: false,
-        message: "CV mặc định chưa có ngành nghề để lọc việc làm phù hợp.",
       });
     }
 
