@@ -154,6 +154,12 @@ const normalizeTimestamp = (value) => {
     return null;
   }
 
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    const date = new Date(`${value.trim()}T23:59:59.999`);
+
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
@@ -1191,23 +1197,12 @@ const updateJob = async (req, res) => {
   try {
     const jobId = req.params.id;
 
-    const {
-      name,
-      description,
-      salaryMin,
-      salaryMax,
-      status,
-      expire,
-      location,
-      levelId,
-      jobTypeId,
-      candidateNumber,
-      expMin,
-      expMax,
-      jobBenefit,
-      jobRequirement,
-      industryIds,
-    } = req.body;
+    if (!isValidId(jobId)) {
+      return res.status(400).json({
+        success: false,
+        message: "jobId không hợp lệ.",
+      });
+    }
 
     const oldJob = await getJobById(jobId);
 
@@ -1218,22 +1213,125 @@ const updateJob = async (req, res) => {
       });
     }
 
+    const payload = getJobPayload(req.body);
+    const name = normalizeText(payload.name);
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên tin tuyển dụng không được để trống.",
+      });
+    }
+
+    const salaryMin = normalizeDecimal(
+      readAlias(payload, ["salaryMin", "salary_min"]),
+    );
+    const salaryMax = normalizeDecimal(
+      readAlias(payload, ["salaryMax", "salary_max"]),
+    );
+    const normalizedStatus = normalizeBigInt(payload.status);
+    const expire = normalizeTimestamp(
+      readAlias(payload, ["expire", "expireAt", "expire_at"]),
+    );
+    const levelId = normalizeBigInt(
+      readAlias(payload, ["levelId", "idLevel", "id_level"]),
+    );
+    const jobTypeId = normalizeBigInt(
+      readAlias(payload, ["jobTypeId", "job_type_id"]),
+    );
+    const candidateNumber = normalizeBigInt(
+      readAlias(payload, ["candidateNumber", "candidate_number"]),
+    );
+    const expMin = normalizeDecimal(readAlias(payload, ["expMin", "exp_min"]));
+    const expMax = normalizeDecimal(readAlias(payload, ["expMax", "exp_max"]));
+    const industryKeys = [
+      "industryIds",
+      "industry_ids",
+      "industryId",
+      "industry_id",
+    ];
+    const hasIndustryIds = hasAnyOwn(payload, industryKeys);
+    const industryIds = hasIndustryIds
+      ? normalizeIndustryIds(readAlias(payload, industryKeys))
+      : [];
+
+    let status =
+      normalizedStatus === null ? Number(oldJob.status ?? 1) : normalizedStatus;
+
+    if (expire !== undefined) {
+      status = expire && expire.getTime() <= Date.now() ? 2 : 1;
+    }
+
+    const invalidNumberFields = [
+      ["Mức lương tối thiểu", salaryMin],
+      ["Mức lương tối đa", salaryMax],
+      ["Trạng thái", status],
+      ["Cấp độ", levelId],
+      ["Hình thức làm việc", jobTypeId],
+      ["Số lượng tuyển", candidateNumber],
+      ["Kinh nghiệm tối thiểu", expMin],
+      ["Kinh nghiệm tối đa", expMax],
+    ].filter(([, value]) => value === undefined);
+
+    if (invalidNumberFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `${invalidNumberFields[0][0]} không hợp lệ.`,
+      });
+    }
+
+    if (hasIndustryIds && industryIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Lĩnh vực công việc không hợp lệ.",
+      });
+    }
+
+    if (expire === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Ngày hết hạn tuyển dụng không hợp lệ.",
+      });
+    }
+
+    if (
+      salaryMin !== null &&
+      salaryMax !== null &&
+      Number(salaryMin) > Number(salaryMax)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Mức lương tối thiểu không được lớn hơn mức lương tối đa.",
+      });
+    }
+
+    if (expMin !== null && expMax !== null && Number(expMin) > Number(expMax)) {
+      return res.status(400).json({
+        success: false,
+        message: "Kinh nghiệm tối thiểu không được lớn hơn kinh nghiệm tối đa.",
+      });
+    }
+
     const updatedJob = await updateJobById({
       jobId,
       name,
-      description,
+      description: normalizeText(payload.description),
       salaryMin,
       salaryMax,
       status,
       expire,
-      location,
+      location: normalizeText(payload.location),
       levelId,
       jobTypeId,
       candidateNumber,
       expMin,
       expMax,
-      jobBenefit,
-      jobRequirement,
+      jobBenefit: normalizeText(
+        readAlias(payload, ["jobBenefit", "job_benefit"]),
+      ),
+      jobRequirement: normalizeText(
+        readAlias(payload, ["jobRequirement", "job_requirement"]),
+      ),
       industryIds,
     });
 
