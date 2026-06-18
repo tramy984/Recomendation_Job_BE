@@ -560,7 +560,7 @@ const applyMyJob = async (req, res) => {
       success: true,
       message: result.created
         ? "Ứng tuyển việc làm thành công."
-        : "Bạn đã ứng tuyển việc làm này trước đó.",
+        : "Cập nhật điểm CV ứng tuyển thành công.",
       data: {
         application: result.application,
       },

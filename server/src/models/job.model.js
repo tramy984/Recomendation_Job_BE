@@ -1,4 +1,75 @@
 const pool = require("../config/db");
+const { extractJobInfo } = require("../services/extractJobSkill");
+const {
+  calculateMatchingScore,
+} = require("../services/matchingScore.service");
+
+const extractSkillsFromCvText = (cvText = "") => {
+  const skillsText = String(cvText).split(/Skills:/i)[1] || "";
+
+  return skillsText
+    .split(",")
+    .map((skill) => skill.toLowerCase().trim().replace(/\.+$/, ""))
+    .filter(Boolean);
+};
+
+const recalculateApplicationScoresForJob = async ({ job, client }) => {
+  if (!job?.id) return 0;
+
+  await client.query(`
+    ALTER TABLE applications
+      ADD COLUMN IF NOT EXISTS matching_score DOUBLE PRECISION;
+
+    ALTER TABLE cvs
+      ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+  `);
+
+  const jobText = [job.name, job.description, job.job_requirement]
+    .filter(Boolean)
+    .join(" ");
+  const jobInfo = extractJobInfo(jobText);
+  const jobSkills = jobInfo.skills;
+  const jobDegree = jobInfo.degree;
+
+  const applicationResult = await client.query(
+    `
+    SELECT
+      a.id,
+      cv.cv_text,
+      cv.degree,
+      cv.exp_max
+    FROM applications a
+    INNER JOIN cvs cv ON cv.id = a.cv_id
+    WHERE a.job_id = $1
+      AND COALESCE(cv.is_deleted, FALSE) = FALSE
+    `,
+    [job.id],
+  );
+
+  for (const application of applicationResult.rows) {
+    const cvSkills = extractSkillsFromCvText(application.cv_text);
+    const matchingResult = calculateMatchingScore({
+      cvSkills,
+      jobSkills,
+      cvDegree: application.degree,
+      jobDegree,
+      cvExpMax: application.exp_max,
+      jobExpMin: job.exp_min,
+      jobExpMax: job.exp_max,
+    });
+
+    await client.query(
+      `
+      UPDATE applications
+      SET matching_score = $2
+      WHERE id = $1
+      `,
+      [application.id, matchingResult.score],
+    );
+  }
+
+  return applicationResult.rowCount;
+};
 
 const getAllJobTypes = async () => {
   const result = await pool.query(
@@ -328,6 +399,11 @@ const getApplicationById = async (applicationId) => {
       a.candidate_id,
       a.cv_id,
       a.status,
+      a.matching_score,
+      CASE
+        WHEN a.matching_score IS NULL THEN NULL
+        ELSE ROUND((a.matching_score::numeric * 100), 2)::float
+      END AS matching_percent,
       a.created_at,
       a.approved_at,
       a.reason_reject,
@@ -650,6 +726,13 @@ const updateJobById = async ({
     }
 
     const updatedJob = await getJobById(jobId, client);
+    const updatedApplicationScoresCount =
+      await recalculateApplicationScoresForJob({
+        job: updatedJob,
+        client,
+      });
+
+    updatedJob.updated_application_scores_count = updatedApplicationScoresCount;
 
     await client.query("COMMIT");
 

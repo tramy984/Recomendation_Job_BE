@@ -21,6 +21,9 @@ const ensureApplicationTableDefaults = () => {
       ALTER TABLE applications
         ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
 
+      ALTER TABLE applications
+        ADD COLUMN IF NOT EXISTS matching_score DOUBLE PRECISION;
+
       ALTER TABLE cvs
         ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 
@@ -43,6 +46,11 @@ const getApplicationById = async (applicationId, client = pool) => {
       a.cv_id,
       a.job_id,
       a.status,
+      a.matching_score,
+      CASE
+        WHEN a.matching_score IS NULL THEN NULL
+        ELSE ROUND((a.matching_score::numeric * 100), 2)::float
+      END AS matching_percent,
       a.created_at,
       a.approved_at,
       a.reason_reject,
@@ -158,34 +166,6 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
       return { error: "cv_not_found" };
     }
 
-    const existingResult = await client.query(
-      `
-      SELECT id
-      FROM applications
-      WHERE candidate_id = $1
-        AND job_id = $2
-      ORDER BY id DESC
-      LIMIT 1
-      `,
-      [candidateId, jobId],
-    );
-
-    const existingApplication = existingResult.rows[0];
-
-    if (existingApplication) {
-      const application = await getApplicationById(
-        existingApplication.id,
-        client,
-      );
-
-      await client.query("COMMIT");
-
-      return {
-        application,
-        created: false,
-      };
-    }
-
     const cvSkills = extractSkillsFromCvText(cv.cv_text);
     const jobText = [job.name, job.description, job.job_requirement]
       .filter(Boolean)
@@ -209,6 +189,46 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
     console.log("Job Skills:", jobSkills);
     console.log("Matched:", matchingResult.matchedSkills);
     console.log("Score:", matchingResult.score);
+
+    const existingResult = await client.query(
+      `
+      SELECT id
+      FROM applications
+      WHERE candidate_id = $1
+        AND job_id = $2
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [candidateId, jobId],
+    );
+
+    const existingApplication = existingResult.rows[0];
+
+    if (existingApplication) {
+      await client.query(
+        `
+        UPDATE applications
+        SET
+          cv_id = $2,
+          matching_score = $3
+        WHERE id = $1
+        `,
+        [existingApplication.id, cv.id, matchingResult.score],
+      );
+
+      const application = await getApplicationById(
+        existingApplication.id,
+        client,
+      );
+
+      await client.query("COMMIT");
+
+      return {
+        application,
+        created: false,
+        updated: true,
+      };
+    }
 
     const applicationResult = await client.query(
       `
@@ -257,6 +277,8 @@ const applyJobForCandidate = async ({ candidateId, jobId, cvId = null }) => {
 const findApplicationsByCandidateId = async (candidateId) => {
   if (!candidateId) return [];
 
+  await ensureApplicationTableDefaults();
+
   const result = await pool.query(
     `
     SELECT
@@ -265,6 +287,11 @@ const findApplicationsByCandidateId = async (candidateId) => {
       a.cv_id,
       a.job_id,
       a.status,
+      a.matching_score,
+      CASE
+        WHEN a.matching_score IS NULL THEN NULL
+        ELSE ROUND((a.matching_score::numeric * 100), 2)::float
+      END AS matching_percent,
       a.created_at,
       a.approved_at,
       a.reason_reject,

@@ -243,6 +243,7 @@ CREATE TABLE applications (
     cv_id BIGINT,
     job_id BIGINT,
     status VARCHAR(255),
+    matching_score DOUBLE PRECISION,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     approved_at TIMESTAMP,
     reason_reject TEXT,
