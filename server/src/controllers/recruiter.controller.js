@@ -498,6 +498,7 @@ const getMyRecruiterPostingChecklist = async (req, res) => {
         isCertificateApproved: Boolean(
           checklist.is_certificate_approved
         ),
+        hasPostedJob: Boolean(checklist.has_posted_job),
       },
     });
   } catch (error) {

@@ -11,6 +11,7 @@ const {
   approvePendingCompany,
   createPendingCompany,
   getAllPendingCompanies,
+  getPendingCompanyByCompanyIdAndRecruiterId,
   getPendingCompaniesByRecruiterId,
   getPendingCompanyById,
   rejectPendingCompany,
@@ -163,6 +164,35 @@ const formatCompanyResponse = (req, company) => {
     ...company,
     logo: getPublicUrl(req, company.logo),
     certificate: getPublicUrl(req, company.certificate),
+  };
+};
+
+const formatCompanyPendingPreviewResponse = (req, company, pendingCompany) => {
+  const formattedCompany = formatCompanyResponse(req, company);
+  const formattedPendingCompany = formatPendingCompanyResponse(
+    req,
+    pendingCompany
+  );
+
+  if (!formattedCompany || !formattedPendingCompany) {
+    return formattedCompany;
+  }
+
+  return {
+    ...formattedCompany,
+    name: formattedPendingCompany.name,
+    tax_code: formattedPendingCompany.tax_code,
+    description: formattedPendingCompany.description,
+    location: formattedPendingCompany.location,
+    url_website: formattedPendingCompany.url_website,
+    url_facebook: formattedPendingCompany.url_facebook,
+    logo: formattedPendingCompany.logo,
+    certificate: formattedPendingCompany.certificate,
+    industries: formattedPendingCompany.industries,
+    has_pending_update: true,
+    pending_company_id: formattedPendingCompany.id,
+    pending_request_type: formattedPendingCompany.request_type,
+    pending_status: formattedPendingCompany.status,
   };
 };
 
@@ -1040,6 +1070,15 @@ const getMyCompany = async (req, res) => {
       });
     }
 
+    const recruiter = await getRecruiterByUserId(userId);
+
+    if (!recruiter) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin nhà tuyển dụng.",
+      });
+    }
+
     const company = await getCompanyByRecruiterUserId(userId);
 
     if (!company) {
@@ -1049,11 +1088,25 @@ const getMyCompany = async (req, res) => {
       });
     }
 
+    const pendingCompany =
+      company.company_id && recruiter.id
+        ? await getPendingCompanyByCompanyIdAndRecruiterId({
+            companyId: company.company_id,
+            recruiterId: recruiter.id,
+          })
+        : null;
+    const responseCompany = pendingCompany
+      ? formatCompanyPendingPreviewResponse(req, company, pendingCompany)
+      : formatCompanyResponse(req, company);
+
     return res.status(200).json({
       success: true,
       message: "Lấy thông tin công ty thành công.",
       data: {
-        company,
+        company: responseCompany,
+        pendingCompany: pendingCompany
+          ? formatPendingCompanyResponse(req, pendingCompany)
+          : null,
       },
     });
   } catch (error) {

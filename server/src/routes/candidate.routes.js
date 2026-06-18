@@ -5,6 +5,7 @@ const {
   getCandidateDetail,
   getMyApplications,
   getMyCandidate,
+  getMyRecommendedJobsFullPosNeg,
   getMyRecommendedJobs,
   getMySavedJobs,
   saveMyJob,
@@ -23,6 +24,12 @@ router.get("/me", verifyToken, getMyCandidate);
 router.get("/saved-jobs", verifyToken, getMySavedJobs);
 
 router.get("/recommended-jobs", verifyToken, getMyRecommendedJobs);
+
+router.get(
+  "/recommended-jobs/full-pos-neg",
+  verifyToken,
+  getMyRecommendedJobsFullPosNeg,
+);
 
 router.get("/applications", verifyToken, getMyApplications);
 

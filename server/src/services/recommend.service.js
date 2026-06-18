@@ -2,6 +2,14 @@ const axios = require("axios");
 
 const DEFAULT_AI_SERVER_URL = "https://my984-recommendation-job.hf.space/";
 
+const getRecommendServerUrl = () => {
+  return (
+    process.env.AI_SERVER_URL ||
+    process.env.AI_RECOMMEND_SERVER_URL ||
+    DEFAULT_AI_SERVER_URL
+  ).replace(/\/+$/, "");
+};
+
 const getRecommendApiUrl = () => {
   const apiUrl = process.env.RECOMMEND_API_URL;
 
@@ -9,13 +17,17 @@ const getRecommendApiUrl = () => {
     return apiUrl;
   }
 
-  const serverUrl = (
-    process.env.AI_SERVER_URL ||
-    process.env.AI_RECOMMEND_SERVER_URL ||
-    DEFAULT_AI_SERVER_URL
-  ).replace(/\/+$/, "");
+  return `${getRecommendServerUrl()}/recommend`;
+};
 
-  return `${serverUrl}/recommend`;
+const getRecommendFullPosNegApiUrl = () => {
+  const apiUrl = process.env.RECOMMEND_FULL_POS_NEG_API_URL;
+
+  if (apiUrl) {
+    return apiUrl;
+  }
+
+  return `${getRecommendServerUrl()}/recommend/full-pos-neg`;
 };
 
 const getRecommendTimeoutMs = () => {
@@ -192,6 +204,55 @@ const getEmbeddingScore = (job) => {
   return score ?? 0;
 };
 
+const getJobIndustryIds = (job) => {
+  const industryIds = [];
+
+  if (Array.isArray(job?.industries)) {
+    job.industries.forEach((industry) => {
+      const industryId =
+        typeof industry === "object"
+          ? normalizeInteger(industry?.id)
+          : normalizeInteger(industry);
+
+      if (industryId !== null) {
+        industryIds.push(industryId);
+      }
+    });
+  }
+
+  const directIndustryId = normalizeInteger(
+    job?.industry_id ?? job?.industryId ?? job?.industry?.id,
+  );
+
+  if (directIndustryId !== null) {
+    industryIds.push(directIndustryId);
+  }
+
+  return [...new Set(industryIds)];
+};
+
+const scoreIndustryMatch = ({ candidateIndustryId, job }) => {
+  const normalizedCandidateIndustryId = normalizeInteger(candidateIndustryId);
+  const fallbackPriority = normalizeInteger(
+    job?.industry_priority ?? job?.industryPriority,
+  );
+
+  if (normalizedCandidateIndustryId === null) {
+    return {
+      industryPriority: fallbackPriority ?? 0,
+      industryMatch: Boolean(fallbackPriority),
+    };
+  }
+
+  const jobIndustryIds = getJobIndustryIds(job);
+  const industryMatch = jobIndustryIds.includes(normalizedCandidateIndustryId);
+
+  return {
+    industryPriority: industryMatch ? 1 : 0,
+    industryMatch,
+  };
+};
+
 const extractProvince = (location) => {
   const text = normalizeComparableText(location);
 
@@ -345,10 +406,16 @@ const rerankRecommendedJobs = ({ jobs, candidate, cv }) => {
   const candidateLocation = cv?.location || candidate?.location;
   const candidateExperience = cv?.exp_max ?? cv?.exp_min;
   const candidateDegree = cv?.degree;
+  const candidateIndustryId =
+    cv?.id_industry ?? cv?.industryId ?? cv?.industry_id;
 
   return jobs
     .map((job, index) => {
       const embeddingScore = getEmbeddingScore(job);
+      const { industryPriority, industryMatch } = scoreIndustryMatch({
+        candidateIndustryId,
+        job,
+      });
       const {
         locationScore,
         locationPriority,
@@ -386,11 +453,17 @@ const rerankRecommendedJobs = ({ jobs, candidate, cv }) => {
         job_region_name: VIETNAM_REGION_LABELS[jobRegion] || null,
         experience_score: experienceScore,
         education_score: educationScore,
+        industry_priority: industryPriority,
+        industry_match: industryMatch,
         rerank_score: Number(rerankScore.toFixed(6)),
         original_recommend_rank: job?.recommend_rank ?? index + 1,
       };
     })
     .sort((left, right) => {
+      if (right.industry_priority !== left.industry_priority) {
+        return right.industry_priority - left.industry_priority;
+      }
+
       if (right.location_priority !== left.location_priority) {
         return right.location_priority - left.location_priority;
       }
@@ -440,6 +513,25 @@ const normalizeRecommendPayload = (payload) => {
     : [];
 
   return data.map(normalizeRecommendation);
+};
+
+const normalizeRecommendationList = (items) => {
+  return Array.isArray(items) ? items.map(normalizeRecommendation) : [];
+};
+
+const normalizeRecommendFullPosNegPayload = (payload) => {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  const pos = normalizeRecommendationList(data.pos);
+  const neg = normalizeRecommendationList(data.neg);
+
+  return {
+    threshold: normalizeNumber(payload?.threshold),
+    total: normalizeInteger(payload?.total) ?? pos.length + neg.length,
+    totalPos: normalizeInteger(payload?.total_pos) ?? pos.length,
+    totalNeg: normalizeInteger(payload?.total_neg) ?? neg.length,
+    pos,
+    neg,
+  };
 };
 
 const recommendJobsByCVText = async ({ cvText }) => {
@@ -498,7 +590,69 @@ const recommendJobsByCVText = async ({ cvText }) => {
   }
 };
 
+const recommendFullPosNegJobsByCVText = async ({ cvText, threshold }) => {
+  const normalizedCVText = normalizeString(cvText);
+
+  if (!normalizedCVText) {
+    throw new Error("cvText is required to recommend jobs.");
+  }
+
+  const apiUrl = getRecommendFullPosNegApiUrl();
+  const normalizedThreshold = normalizeNumber(threshold);
+  const requestBody = {
+    cv_text: normalizedCVText,
+  };
+
+  if (normalizedThreshold !== null) {
+    requestBody.threshold = normalizedThreshold;
+  }
+
+  console.log("RECOMMEND FULL POS NEG API URL:", apiUrl);
+
+  try {
+    const response = await axios.post(apiUrl, requestBody, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      timeout: getRecommendTimeoutMs(),
+    });
+
+    const payload = response.data;
+
+    console.log(
+      "AI RECOMMEND FULL POS NEG RAW PAYLOAD:",
+      JSON.stringify(payload, null, 2),
+    );
+
+    if (payload?.success === false) {
+      throw new Error(
+        payload?.message ||
+          payload?.error ||
+          "Recommend full pos neg API returned failure.",
+      );
+    }
+
+    const recommendations = normalizeRecommendFullPosNegPayload(payload);
+
+    console.log("AI RECOMMEND FULL POS NEG NORMALIZED:", recommendations);
+
+    return recommendations;
+  } catch (error) {
+    console.log("AI RECOMMEND FULL POS NEG REQUEST ERROR:");
+
+    if (error.response) {
+      console.log("STATUS:", error.response.status);
+      console.log("DATA:", JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.log("MESSAGE:", error.message);
+    }
+
+    throw error;
+  }
+};
+
 module.exports = {
+  recommendFullPosNegJobsByCVText,
   recommendJobsByCVText,
   rerankRecommendedJobs,
 };

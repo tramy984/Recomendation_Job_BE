@@ -99,7 +99,12 @@ const getRecruiterPostingChecklistByUserId = async (userId) => {
             AND NULLIF(BTRIM(pc.certificate), '') IS NOT NULL
         )
       ) AS has_company_info,
-      COALESCE(r.status, FALSE) AS is_certificate_approved
+      COALESCE(r.status, FALSE) AS is_certificate_approved,
+      EXISTS (
+        SELECT 1
+        FROM jobs j
+        WHERE j.recruiter_id = r.id
+      ) AS has_posted_job
     FROM recruiter r
     LEFT JOIN company c ON c.company_id = r.company_id
     WHERE r.user_id = $1
