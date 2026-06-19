@@ -107,8 +107,7 @@ const getRecommendedJobIndustryIds = (job) => {
 
   if (Array.isArray(job?.industries)) {
     job.industries.forEach((industry) => {
-      const industryId =
-        typeof industry === "object" ? industry?.id : industry;
+      const industryId = typeof industry === "object" ? industry?.id : industry;
 
       if (isValidId(industryId)) {
         industryIds.push(Number(industryId));
@@ -164,8 +163,7 @@ const getRecommendedJobTypeText = (job) => {
 
 const getRecommendedJobExperienceRange = (job) => {
   const expMin = normalizeNumberFilter(job?.exp_min ?? job?.expMin) ?? 0;
-  const expMax =
-    normalizeNumberFilter(job?.exp_max ?? job?.expMax) ?? expMin;
+  const expMax = normalizeNumberFilter(job?.exp_max ?? job?.expMax) ?? expMin;
 
   return {
     expMin,
@@ -213,21 +211,15 @@ const matchesSalaryFilter = (job, salaryFilter) => {
   if (salaryNumbers?.length >= 2) {
     return matchesSalaryRange({
       job,
-      salaryMin:
-        Math.min(salaryNumbers[0], salaryNumbers[1]) * 1000000,
-      salaryMax:
-        Math.max(salaryNumbers[0], salaryNumbers[1]) * 1000000,
+      salaryMin: Math.min(salaryNumbers[0], salaryNumbers[1]) * 1000000,
+      salaryMax: Math.max(salaryNumbers[0], salaryNumbers[1]) * 1000000,
     });
   }
 
   if (
-    [
-      "under_10",
-      "duoi_10",
-      "duoi_10_trieu",
-      "less_than_10",
-      "lt_10",
-    ].includes(normalizedFilter)
+    ["under_10", "duoi_10", "duoi_10_trieu", "less_than_10", "lt_10"].includes(
+      normalizedFilter,
+    )
   ) {
     return matchesSalaryRange({ job, salaryMin: null, salaryMax: 10000000 });
   }
@@ -272,7 +264,8 @@ const matchesSalaryFilter = (job, salaryFilter) => {
 };
 
 const getRecommendedJobLevelId = (job) => {
-  const levelId = job?.id_level ?? job?.level_id ?? job?.levelId ?? job?.level?.id;
+  const levelId =
+    job?.id_level ?? job?.level_id ?? job?.levelId ?? job?.level?.id;
 
   return isValidId(levelId) ? Number(levelId) : null;
 };
@@ -318,13 +311,9 @@ const matchesExperienceFilter = (job, experienceFilter) => {
   }
 
   if (
-    [
-      "under_1",
-      "duoi_1",
-      "duoi_1_nam",
-      "less_than_1",
-      "lt_1",
-    ].includes(normalizedFilter)
+    ["under_1", "duoi_1", "duoi_1_nam", "less_than_1", "lt_1"].includes(
+      normalizedFilter,
+    )
   ) {
     return expMax > 0 && matchesExperienceRange({ job, expMin: 0, expMax: 1 });
   }
@@ -338,13 +327,9 @@ const matchesExperienceFilter = (job, experienceFilter) => {
   }
 
   if (
-    [
-      "over_5",
-      "tren_5",
-      "tren_5_nam",
-      "greater_than_5",
-      "gt_5",
-    ].includes(normalizedFilter)
+    ["over_5", "tren_5", "tren_5_nam", "greater_than_5", "gt_5"].includes(
+      normalizedFilter,
+    )
   ) {
     return expMax > 5;
   }
@@ -408,9 +393,7 @@ const getRecommendedJobFilters = (query = {}) => {
         : null,
     industryText: isValidId(industry) ? "" : industryText,
     jobTypeId:
-      !isAllFilterValue(jobType) && isValidId(jobType)
-        ? Number(jobType)
-        : null,
+      !isAllFilterValue(jobType) && isValidId(jobType) ? Number(jobType) : null,
     jobTypeText: isValidId(jobType) ? "" : jobTypeText,
     levelId:
       !isAllFilterValue(level) && isValidId(level) ? Number(level) : null,
@@ -1291,7 +1274,7 @@ const applyMyJob = async (req, res) => {
       success: true,
       message: result.created
         ? "Ứng tuyển việc làm thành công."
-        : "Cập nhật điểm CV ứng tuyển thành công.",
+        : "Bạn đã ứng tuyển việc làm này trước đây.",
       data: {
         application: result.application,
       },
